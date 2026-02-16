@@ -27,14 +27,15 @@ func TestFetchEvents_RealAPIFormat(t *testing.T) {
 		}
 
 		// Return mock data in real API format
+		// Note: category field is null, actual categories are in tags array
 		// Note: outcomes and outcomePrices are JSON STRINGS, not arrays
 		events := []PolymarketEvent{
 			{
 				ID:          "event-1",
 				Title:       "Will candidate X win the election?",
 				Description: "Test event description",
-				Category:    "politics",
-				Subcategory: "elections",
+				Category:    "", // Often null in real API
+				Subcategory: "",
 				Active:      true,
 				Closed:      false,
 				Volume24hr:  50000.0,
@@ -51,13 +52,17 @@ func TestFetchEvents_RealAPIFormat(t *testing.T) {
 						ClobTokenIds:  "[\"token1\", \"token2\"]",
 					},
 				},
+				Tags: []PolymarketTag{
+					{ID: "1", Label: "Politics", Slug: "politics"},
+					{ID: "2", Label: "Elections", Slug: "elections"},
+				},
 			},
 			{
 				ID:          "event-2",
 				Title:       "Will team Y win the championship?",
 				Description: "Sports event",
-				Category:    "sports",
-				Subcategory: "basketball",
+				Category:    "", // Often null in real API
+				Subcategory: "",
 				Active:      true,
 				Closed:      false,
 				Volume24hr:  25000.0,
@@ -74,11 +79,17 @@ func TestFetchEvents_RealAPIFormat(t *testing.T) {
 						ClobTokenIds:  "[\"token3\", \"token4\"]",
 					},
 				},
+				Tags: []PolymarketTag{
+					{ID: "3", Label: "Sports", Slug: "sports"},
+					{ID: "4", Label: "Basketball", Slug: "basketball"},
+				},
 			},
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(events)
+		if err := json.NewEncoder(w).Encode(events); err != nil {
+			t.Errorf("Failed to encode events: %v", err)
+		}
 	}))
 	defer mockServer.Close()
 
@@ -94,7 +105,7 @@ func TestFetchEvents_RealAPIFormat(t *testing.T) {
 
 	// Verify results
 	if len(events) != 1 {
-		t.Errorf("Expected 1 event (politics category), got %d", len(events))
+		t.Fatalf("Expected 1 event (politics category), got %d", len(events))
 	}
 
 	event := events[0]
@@ -125,7 +136,7 @@ func TestFetchEvents_VolumeFilterOR(t *testing.T) {
 			{
 				ID:         "event-1",
 				Title:      "High 24hr volume",
-				Category:   "politics",
+				Category:   "", // Null in real API
 				Active:     true,
 				Closed:     false,
 				Volume24hr: 50000.0, // Passes vol24hrMin
@@ -137,11 +148,14 @@ func TestFetchEvents_VolumeFilterOR(t *testing.T) {
 						OutcomePrices: "[\"0.5\", \"0.5\"]",
 					},
 				},
+				Tags: []PolymarketTag{
+					{ID: "1", Label: "Politics", Slug: "politics"},
+				},
 			},
 			{
 				ID:         "event-2",
 				Title:      "High 1wk volume",
-				Category:   "politics",
+				Category:   "", // Null in real API
 				Active:     true,
 				Closed:     false,
 				Volume24hr: 5000.0,   // Fails vol24hrMin
@@ -153,11 +167,14 @@ func TestFetchEvents_VolumeFilterOR(t *testing.T) {
 						OutcomePrices: "[\"0.5\", \"0.5\"]",
 					},
 				},
+				Tags: []PolymarketTag{
+					{ID: "1", Label: "Politics", Slug: "politics"},
+				},
 			},
 			{
 				ID:         "event-3",
 				Title:      "Low volume all",
-				Category:   "politics",
+				Category:   "", // Null in real API
 				Active:     true,
 				Closed:     false,
 				Volume24hr: 1000.0,  // Fails vol24hrMin
@@ -169,10 +186,15 @@ func TestFetchEvents_VolumeFilterOR(t *testing.T) {
 						OutcomePrices: "[\"0.5\", \"0.5\"]",
 					},
 				},
+				Tags: []PolymarketTag{
+					{ID: "1", Label: "Politics", Slug: "politics"},
+				},
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(events)
+		if err := json.NewEncoder(w).Encode(events); err != nil {
+			t.Errorf("Failed to encode events: %v", err)
+		}
 	}))
 	defer mockServer.Close()
 
@@ -199,7 +221,7 @@ func TestFetchEvents_VolumeFilterAND(t *testing.T) {
 			{
 				ID:         "event-1",
 				Title:      "Passes all",
-				Category:   "politics",
+				Category:   "", // Null in real API
 				Active:     true,
 				Closed:     false,
 				Volume24hr: 50000.0,
@@ -211,11 +233,14 @@ func TestFetchEvents_VolumeFilterAND(t *testing.T) {
 						OutcomePrices: "[\"0.5\", \"0.5\"]",
 					},
 				},
+				Tags: []PolymarketTag{
+					{ID: "1", Label: "Politics", Slug: "politics"},
+				},
 			},
 			{
 				ID:         "event-2",
 				Title:      "Fails one",
-				Category:   "politics",
+				Category:   "", // Null in real API
 				Active:     true,
 				Closed:     false,
 				Volume24hr: 5000.0, // Fails 24hr min
@@ -227,10 +252,15 @@ func TestFetchEvents_VolumeFilterAND(t *testing.T) {
 						OutcomePrices: "[\"0.5\", \"0.5\"]",
 					},
 				},
+				Tags: []PolymarketTag{
+					{ID: "1", Label: "Politics", Slug: "politics"},
+				},
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(events)
+		if err := json.NewEncoder(w).Encode(events); err != nil {
+			t.Errorf("Failed to encode events: %v", err)
+		}
 	}))
 	defer mockServer.Close()
 
@@ -253,13 +283,13 @@ func TestFetchEvents_VolumeFilterAND(t *testing.T) {
 }
 
 func TestFetchEvents_MultiMarketMaxProbability(t *testing.T) {
-	// Test that multi-market events select max probability
+	// Test that multi-market events use first valid market (probabilities must sum to 1.0 within same market)
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		events := []PolymarketEvent{
 			{
 				ID:         "event-1",
 				Title:      "Multi-market event",
-				Category:   "politics",
+				Category:   "", // Null in real API
 				Active:     true,
 				Closed:     false,
 				Volume24hr: 50000.0,
@@ -268,25 +298,30 @@ func TestFetchEvents_MultiMarketMaxProbability(t *testing.T) {
 						ID:            "market-1",
 						Question:      "Market 1",
 						Outcomes:      "[\"Yes\", \"No\"]",
-						OutcomePrices: "[\"0.60\", \"0.40\"]", // Yes=0.60
+						OutcomePrices: "[\"0.60\", \"0.40\"]", // Yes=0.60, No=0.40 (sums to 1.0)
 					},
 					{
 						ID:            "market-2",
 						Question:      "Market 2",
 						Outcomes:      "[\"Yes\", \"No\"]",
-						OutcomePrices: "[\"0.75\", \"0.25\"]", // Yes=0.75 (max)
+						OutcomePrices: "[\"0.75\", \"0.25\"]", // Would be Yes=0.75 but not used
 					},
 					{
 						ID:            "market-3",
 						Question:      "Market 3",
 						Outcomes:      "[\"Yes\", \"No\"]",
-						OutcomePrices: "[\"0.55\", \"0.45\"]", // Yes=0.55
+						OutcomePrices: "[\"0.55\", \"0.45\"]", // Would be Yes=0.55 but not used
 					},
+				},
+				Tags: []PolymarketTag{
+					{ID: "1", Label: "Politics", Slug: "politics"},
 				},
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(events)
+		if err := json.NewEncoder(w).Encode(events); err != nil {
+			t.Errorf("Failed to encode events: %v", err)
+		}
 	}))
 	defer mockServer.Close()
 
@@ -302,12 +337,17 @@ func TestFetchEvents_MultiMarketMaxProbability(t *testing.T) {
 		t.Fatalf("Expected 1 event, got %d", len(events))
 	}
 
-	// Should select max Yes probability (0.75) and max No probability (0.45)
-	if events[0].YesProbability != 0.75 {
-		t.Errorf("Expected max yes probability 0.75, got %f", events[0].YesProbability)
+	// Should use first valid market's probabilities (they must sum to 1.0)
+	if events[0].YesProbability != 0.60 {
+		t.Errorf("Expected yes probability 0.60 from first market, got %f", events[0].YesProbability)
 	}
-	if events[0].NoProbability != 0.45 {
-		t.Errorf("Expected max no probability 0.45, got %f", events[0].NoProbability)
+	if events[0].NoProbability != 0.40 {
+		t.Errorf("Expected no probability 0.40 from first market, got %f", events[0].NoProbability)
+	}
+	// Verify probabilities sum to 1.0 (within tolerance)
+	sum := events[0].YesProbability + events[0].NoProbability
+	if sum < 0.99 || sum > 1.01 {
+		t.Errorf("Probabilities should sum to ~1.0, got %f", sum)
 	}
 }
 

@@ -1,6 +1,13 @@
+// Package monitor provides probability change detection functionality.
+// It analyzes probability snapshots over time windows to identify significant
+// changes that exceed configurable thresholds.
+//
+// The monitor uses a threshold-based algorithm to detect meaningful probability
+// movements and ranks them by magnitude for notification purposes.
 package monitor
 
 import (
+	"fmt"
 	"math"
 	"sort"
 	"time"
@@ -24,6 +31,13 @@ func New(s *storage.Storage) *Monitor {
 
 // DetectChanges identifies significant probability changes within a time window
 func (m *Monitor) DetectChanges(events []models.Event, threshold float64, window time.Duration) ([]models.Change, error) {
+	if threshold < 0 || threshold > 1 {
+		return nil, fmt.Errorf("invalid threshold %.2f: must be between 0 and 1", threshold)
+	}
+	if window <= 0 {
+		return nil, fmt.Errorf("invalid window %v: must be positive", window)
+	}
+
 	var changes []models.Change
 	now := time.Now()
 
@@ -31,6 +45,7 @@ func (m *Monitor) DetectChanges(events []models.Event, threshold float64, window
 		// Get snapshots within the time window
 		snapshots, err := m.storage.GetSnapshotsInWindow(event.ID, window)
 		if err != nil {
+			// Log error but continue processing other events
 			continue
 		}
 
@@ -75,6 +90,9 @@ func (m *Monitor) DetectChanges(events []models.Event, threshold float64, window
 
 // RankChanges sorts changes by magnitude and returns top K
 func (m *Monitor) RankChanges(changes []models.Change, k int) []models.Change {
+	if k <= 0 {
+		return []models.Change{}
+	}
 	if len(changes) == 0 {
 		return []models.Change{}
 	}

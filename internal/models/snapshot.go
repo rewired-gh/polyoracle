@@ -5,14 +5,19 @@ import (
 	"time"
 )
 
-// Snapshot represents a point-in-time probability reading for an event
+// Snapshot represents a point-in-time probability reading for an event.
+// Snapshots are recorded periodically to track probability changes over time
+// and enable change detection within configurable time windows.
+//
+// Each snapshot captures the Yes/No probabilities at a specific moment,
+// along with metadata about when it was recorded and the data source.
 type Snapshot struct {
 	ID             string    `json:"id"`
 	EventID        string    `json:"event_id"`
 	YesProbability float64   `json:"yes_probability"`
 	NoProbability  float64   `json:"no_probability"`
 	Timestamp      time.Time `json:"timestamp"`
-	Source         string    `json:"source"`
+	Source         string    `json:"source"` // Data source identifier (e.g., "polymarket-gamma-api")
 }
 
 // Validate checks that all snapshot fields are valid

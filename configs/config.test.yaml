@@ -1,0 +1,59 @@
+# Poly Oracle Test Configuration
+# Sensitive configuration for end-to-end testing
+#
+# This configuration is optimized for testing - it will generate
+# notifications frequently to verify the system works end-to-end.
+#
+# DO NOT use for production - too sensitive, will generate noise.
+# Based on analysis: monitors ~80-100 events, expects 8-15 alerts/hour
+
+# Polymarket API configuration
+polymarket:
+  gamma_api_url: "https://gamma-api.polymarket.com"
+  clob_api_url: "https://clob.polymarket.com"
+  poll_interval: 5m                                  # Poll every 5 minutes (matches production)
+  categories:                                        # Test with all relevant categories
+    - geopolitics
+    - tech
+    - finance
+    - crypto                                         # Overlaps with tech/finance
+    - world                                          # Global events
+  # Low volume thresholds for testing - captures more events
+  volume_24hr_min: 5000.0       # $5K minimum (captures ~80-100 events)
+  volume_1wk_min: 25000.0       # $25K weekly
+  volume_1mo_min: 50000.0       # $50K monthly
+  volume_filter_or: true        # OR logic (union)
+  limit: 1000                   # Fetch many events
+  timeout: 30s
+
+# Monitoring behavior configuration - very sensitive for testing
+monitor:
+  threshold: 0.01        # 2% change (very sensitive)
+  window: 5m             # 5-minute window (matches poll interval)
+  top_k: 20              # Show top 20 events for testing
+  enabled: true
+
+# Telegram notification configuration
+telegram:
+  bot_token: "YOUR_BOT_TOKEN_HERE"  # Get from @BotFather on Telegram
+  chat_id: "YOUR_CHAT_ID_HERE"      # Get from @userinfobot on Telegram
+  enabled: true                     # Enable Telegram notifications
+
+# Storage and persistence configuration
+storage:
+  max_events: 1000000                       # Maximum events to track in memory
+  max_snapshots_per_event: 288              # 24 hours of 5-minute snapshots (288 = 24*12)
+  max_file_size_mb: 500                     # Maximum persistence file size in MB
+  persistence_interval: 5m                  # Save frequently for testing
+  file_path: ""                             # Empty = use OS tmp dir
+  data_dir: ""                              # Empty = use OS tmp dir
+
+# Logging configuration - debug level for testing
+logging:
+  level: "debug"    # Debug level for detailed testing output
+  format: "text"    # Text format for easier reading during tests
+
+# Environment variables can override any value:
+# POLY_ORACLE_TELEGRAM_BOT_TOKEN=your_token
+# POLY_ORACLE_TELEGRAM_CHAT_ID=your_chat_id
+# POLY_ORACLE_MONITOR_THRESHOLD=0.01

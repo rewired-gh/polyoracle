@@ -125,7 +125,9 @@ func TestStorage_GetTopChanges(t *testing.T) {
 	}
 
 	for _, change := range changes {
-		s.AddChange(change)
+		if err := s.AddChange(change); err != nil {
+			t.Errorf("Failed to add change: %v", err)
+		}
 	}
 
 	// Get top 2 changes
@@ -184,7 +186,9 @@ func TestStorage_RotateSnapshots(t *testing.T) {
 	}
 
 	// Rotate
-	s.RotateSnapshots()
+	if err := s.RotateSnapshots(); err != nil {
+		t.Errorf("Failed to rotate snapshots: %v", err)
+	}
 
 	// Should have only 3 snapshots
 	snapshots, _ := s.GetSnapshots("event-1")
@@ -212,7 +216,7 @@ func TestStorage_EmptyFilePathUsesTmpDir(t *testing.T) {
 
 func TestStorage_SaveAndLoad(t *testing.T) {
 	tempFile := "/tmp/test-poly-oracle-save.json"
-	defer os.Remove(tempFile)
+	defer func() { _ = os.Remove(tempFile) }()
 
 	s := New(100, 50, tempFile)
 

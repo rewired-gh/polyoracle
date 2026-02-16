@@ -90,8 +90,7 @@ internal/
 ├── polymarket/          # Polymarket API client
 ├── monitor/             # Event monitoring and change detection logic
 ├── storage/             # Data persistence and rotation
-├── telegram/            # Telegram notification client
-└── notify/              # Notification orchestration (extensible)
+└── telegram/            # Telegram notification client
 
 pkg/
 └── api/                 # Public API types (if needed)

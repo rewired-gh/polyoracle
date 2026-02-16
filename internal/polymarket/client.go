@@ -1,3 +1,9 @@
+// Package polymarket provides a client for interacting with Polymarket APIs.
+// It fetches prediction market events from the Gamma API and extracts probability
+// data for monitoring purposes.
+//
+// The client includes built-in retry logic, timeout handling, and context
+// cancellation support for robust API interactions.
 package polymarket
 
 import (
@@ -26,8 +32,8 @@ type PolymarketEvent struct {
 	Title       string             `json:"title"`
 	Subtitle    string             `json:"subtitle"`
 	Description string             `json:"description"`
-	Category    string             `json:"category"`
-	Subcategory string             `json:"subcategory"`
+	Category    string             `json:"category"`    // Often null in API response
+	Subcategory string             `json:"subcategory"` // Often null in API response
 	Active      bool               `json:"active"`
 	Closed      bool               `json:"closed"`
 	Volume      float64            `json:"volume"`
@@ -36,6 +42,14 @@ type PolymarketEvent struct {
 	Volume1mo   float64            `json:"volume1mo"`
 	Liquidity   float64            `json:"liquidity"`
 	Markets     []PolymarketMarket `json:"markets"`
+	Tags        []PolymarketTag    `json:"tags"` // Actual category information is here
+}
+
+// PolymarketTag represents a tag from Polymarket API (contains actual category info)
+type PolymarketTag struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	Slug  string `json:"slug"` // This is the category identifier
 }
 
 // PolymarketMarket represents a market from Polymarket API
@@ -82,14 +96,24 @@ func (c *Client) FetchEvents(ctx context.Context, categories []string, vol24hrMi
 
 	resp, err := c.doRequest(ctx, u.String())
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch events: %w", err)
+		return nil, fmt.Errorf("failed to fetch events from %s: %w", u.String(), err)
 	}
 	defer resp.Body.Close()
+
+	// Validate content type
+	contentType := resp.Header.Get("Content-Type")
+	if contentType != "" && contentType != "application/json" && !containsJSON(contentType) {
+		return nil, fmt.Errorf("unexpected content type: %s (expected application/json)", contentType)
+	}
 
 	// Response is array directly, not wrapped
 	var pmEvents []PolymarketEvent
 	if err := json.NewDecoder(resp.Body).Decode(&pmEvents); err != nil {
-		return nil, fmt.Errorf("failed to decode events: %w", err)
+		return nil, fmt.Errorf("failed to decode events JSON: %w", err)
+	}
+
+	if len(pmEvents) == 0 {
+		return []models.Event{}, nil
 	}
 
 	// Filter by categories
@@ -100,9 +124,19 @@ func (c *Client) FetchEvents(ctx context.Context, categories []string, vol24hrMi
 
 	var events []models.Event
 	for _, pe := range pmEvents {
-		// Filter by category if specified
-		if len(categories) > 0 && !categoryMap[pe.Category] {
-			continue
+		// Filter by category using tags (category field is often null in API)
+		if len(categories) > 0 {
+			// Check if any tag matches the requested categories
+			tagMatch := false
+			for _, tag := range pe.Tags {
+				if categoryMap[tag.Slug] {
+					tagMatch = true
+					break
+				}
+			}
+			if !tagMatch {
+				continue
+			}
 		}
 
 		// Apply volume filtering (logical OR or AND)
@@ -125,43 +159,60 @@ func (c *Client) FetchEvents(ctx context.Context, categories []string, vol24hrMi
 		}
 
 		// Extract probabilities from markets
-		// One event can have multiple markets - select max probability change across all markets
-		var maxYesProb, maxNoProb float64
+		// One event can have multiple markets - use the market with highest liquidity/interest
+		// For simplicity, use the first valid market (markets are typically ordered by importance)
+		var selectedYesProb, selectedNoProb float64
 		for _, market := range pe.Markets {
 			yesProb, noProb, err := parseMarketProbabilities(market)
 			if err != nil {
 				continue // Skip invalid markets
 			}
 
-			// Track maximum probabilities across all markets
-			if yesProb > maxYesProb {
-				maxYesProb = yesProb
-			}
-			if noProb > maxNoProb {
-				maxNoProb = noProb
-			}
+			// Use first valid market's probabilities (they sum to 1.0 within the same market)
+			selectedYesProb = yesProb
+			selectedNoProb = noProb
+			break
 		}
 
 		// Skip events with no valid market data
-		if maxYesProb == 0 && maxNoProb == 0 {
+		if selectedYesProb == 0 && selectedNoProb == 0 {
 			continue
 		}
+
+		// Extract primary category from tags (first matching tag or first tag overall)
+		primaryCategory := ""
+		if len(pe.Tags) > 0 {
+			// Try to find a tag that matches our filter categories
+			for _, tag := range pe.Tags {
+				if categoryMap[tag.Slug] {
+					primaryCategory = tag.Slug
+					break
+				}
+			}
+			// If no match found, use the first tag
+			if primaryCategory == "" {
+				primaryCategory = pe.Tags[0].Slug
+			}
+		}
+
+		// Capture current time once to ensure CreatedAt <= LastUpdated
+		now := time.Now()
 
 		event := models.Event{
 			ID:             pe.ID,
 			Title:          pe.Title,
 			Description:    pe.Description,
-			Category:       pe.Category,
+			Category:       primaryCategory, // Use extracted category from tags
 			Subcategory:    pe.Subcategory,
-			YesProbability: maxYesProb,
-			NoProbability:  maxNoProb,
+			YesProbability: selectedYesProb,
+			NoProbability:  selectedNoProb,
 			Volume24hr:     pe.Volume24hr,
 			Volume1wk:      pe.Volume1wk,
 			Volume1mo:      pe.Volume1mo,
 			Liquidity:      pe.Liquidity,
 			Active:         pe.Active && !pe.Closed,
-			LastUpdated:    time.Now(),
-			CreatedAt:      time.Now(),
+			LastUpdated:    now,
+			CreatedAt:      now,
 		}
 
 		events = append(events, event)
@@ -199,14 +250,21 @@ func parseMarketProbabilities(market PolymarketMarket) (float64, float64, error)
 		var price float64
 		fmt.Sscanf(outcomePrices[i], "%f", &price)
 
-		if outcome == "Yes" {
+		switch outcome {
+		case "Yes":
 			yesProb = price
-		} else if outcome == "No" {
+		case "No":
 			noProb = price
 		}
 	}
 
 	return yesProb, noProb, nil
+}
+
+// containsJSON checks if a content-type string contains json
+func containsJSON(contentType string) bool {
+	return len(contentType) >= 16 && contentType[:16] == "application/json" ||
+		len(contentType) > 16 && contentType[:17] == "application/json;"
 }
 
 // doRequest performs HTTP request with retry logic
@@ -215,9 +273,16 @@ func (c *Client) doRequest(ctx context.Context, urlStr string) (*http.Response, 
 	var lastErr error
 
 	for i := 0; i < maxRetries; i++ {
+		// Check if context is cancelled before making request
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("request cancelled: %w", ctx.Err())
+		default:
+		}
+
 		req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to create request: %w", err)
 		}
 
 		req.Header.Set("Accept", "application/json")
@@ -225,19 +290,34 @@ func (c *Client) doRequest(ctx context.Context, urlStr string) (*http.Response, 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
 			lastErr = err
-			time.Sleep(time.Duration(i+1) * time.Second)
-			continue
+			// Exponential backoff with context check
+			select {
+			case <-ctx.Done():
+				return nil, fmt.Errorf("request cancelled during retry: %w", ctx.Err())
+			case <-time.After(time.Duration(i+1) * time.Second):
+				continue
+			}
 		}
 
+		// Handle various HTTP status codes
 		if resp.StatusCode >= 500 {
 			resp.Body.Close()
-			lastErr = fmt.Errorf("server error: %d", resp.StatusCode)
-			time.Sleep(time.Duration(i+1) * time.Second)
-			continue
+			lastErr = fmt.Errorf("server error (status %d): %s", resp.StatusCode, resp.Status)
+			select {
+			case <-ctx.Done():
+				return nil, fmt.Errorf("request cancelled during retry: %w", ctx.Err())
+			case <-time.After(time.Duration(i+1) * time.Second):
+				continue
+			}
+		}
+
+		if resp.StatusCode >= 400 {
+			resp.Body.Close()
+			return nil, fmt.Errorf("client error (status %d): %s", resp.StatusCode, resp.Status)
 		}
 
 		return resp, nil
 	}
 
-	return nil, fmt.Errorf("max retries exceeded: %w", lastErr)
+	return nil, fmt.Errorf("max retries (%d) exceeded: %w", maxRetries, lastErr)
 }

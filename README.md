@@ -142,8 +142,7 @@ internal/                 # Private application code
   ├── polymarket/        # Polymarket API client
   ├── monitor/           # Change detection logic
   ├── storage/           # Data persistence
-  ├── telegram/          # Telegram client
-  └── notify/            # Notification orchestration
+  └── telegram/          # Telegram client
 configs/                 # Configuration files
 deployments/             # Docker & systemd files
 ```
@@ -174,15 +173,15 @@ Data Flow:
 
 | Section | Field | Type | Default | Description |
 |---------|-------|------|---------|-------------|
-| polymarket | poll_interval | duration | 5m | How often to poll for updates |
-| polymarket | categories | []string | [] | Categories to monitor |
-| monitor | threshold | float | 0.10 | Minimum change magnitude |
+| polymarket | poll_interval | duration | 1h | How often to poll for updates |
+| polymarket | categories | []string | ["geopolitics", "tech", "finance"] | Categories to monitor |
+| monitor | threshold | float | 0.05 | Minimum change magnitude (5%) |
 | monitor | window | duration | 1h | Time window for detection |
-| monitor | top_k | int | 10 | Number of events to notify |
+| monitor | top_k | int | 5 | Number of events to notify |
 | telegram | bot_token | string | "" | Telegram bot token |
 | telegram | chat_id | string | "" | Telegram chat ID |
 | storage | max_events | int | 1000 | Maximum events to track |
-| storage | max_snapshots_per_event | int | 100 | Snapshots per event |
+| storage | max_snapshots_per_event | int | 24 | Snapshots per event |
 
 ## Contributing
 

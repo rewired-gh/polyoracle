@@ -1,3 +1,10 @@
+// Package storage provides thread-safe in-memory storage with file-based persistence.
+// It manages events, probability snapshots, and detected changes with automatic
+// data rotation to prevent unbounded memory growth.
+//
+// Storage is designed for reliability with atomic file writes and graceful
+// handling of persistence failures. Data is persisted to JSON files and can
+// be restored on application restart.
 package storage
 
 import (

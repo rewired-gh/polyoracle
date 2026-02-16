@@ -1,3 +1,6 @@
+// Package models defines the core domain entities for the poly-oracle application.
+// These models represent prediction market events, probability snapshots, and detected changes.
+// All models include built-in validation to ensure data integrity throughout the application.
 package models
 
 import (
@@ -5,7 +8,13 @@ import (
 	"time"
 )
 
-// Event represents a prediction market event being monitored from Polymarket
+// Event represents a prediction market event being monitored from Polymarket.
+// Each event contains probability data, volume metrics, and metadata used for
+// tracking significant market movements over time.
+//
+// Events are uniquely identified by their ID and can have multiple underlying
+// markets. The YesProbability and NoProbability fields represent the maximum
+// probabilities across all markets for the event.
 type Event struct {
 	ID             string    `json:"id"`
 	Title          string    `json:"title"` // Event title (from Polymarket API)
@@ -14,10 +23,10 @@ type Event struct {
 	Subcategory    string    `json:"subcategory,omitempty"`
 	YesProbability float64   `json:"yes_probability"` // Maximum Yes probability across all markets
 	NoProbability  float64   `json:"no_probability"`  // Maximum No probability across all markets
-	Volume24hr     float64   `json:"volume_24hr"`     // 24-hour volume
-	Volume1wk      float64   `json:"volume_1wk"`      // 1-week volume
-	Volume1mo      float64   `json:"volume_1mo"`      // 1-month volume
-	Liquidity      float64   `json:"liquidity"`       // Current liquidity
+	Volume24hr     float64   `json:"volume_24hr"`     // 24-hour volume in USD
+	Volume1wk      float64   `json:"volume_1wk"`      // 1-week volume in USD
+	Volume1mo      float64   `json:"volume_1mo"`      // 1-month volume in USD
+	Liquidity      float64   `json:"liquidity"`       // Current liquidity in USD
 	Active         bool      `json:"active"`
 	Closed         bool      `json:"closed"`
 	LastUpdated    time.Time `json:"last_updated"`

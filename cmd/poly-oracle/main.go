@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/poly-oracle/internal/config"
+	"github.com/poly-oracle/internal/logger"
 	"github.com/poly-oracle/internal/models"
 	"github.com/poly-oracle/internal/monitor"
 	"github.com/poly-oracle/internal/polymarket"
@@ -36,8 +37,9 @@ func main() {
 		log.Fatalf("Invalid configuration: %v", err)
 	}
 
-	// Setup logging
-	setupLogging(cfg.GetLoggingConfig())
+	// Setup logging with level support
+	logger.Init(cfg.Logging.Level, cfg.Logging.Format)
+	logger.Info("Configuration loaded from %s", *configPath)
 
 	// Initialize storage
 	store := storage.New(
@@ -48,7 +50,9 @@ func main() {
 
 	// Load persisted data
 	if err := store.Load(); err != nil {
-		log.Printf("Warning: Failed to load persisted data: %v", err)
+		logger.Warn("Failed to load persisted data: %v", err)
+	} else {
+		logger.Debug("Successfully loaded persisted data from storage")
 	}
 
 	// Initialize Polymarket client
@@ -66,9 +70,11 @@ func main() {
 	if cfg.Telegram.Enabled {
 		telegramClient, err = telegram.NewClient(cfg.Telegram.BotToken, cfg.Telegram.ChatID)
 		if err != nil {
-			log.Fatalf("Failed to initialize Telegram client: %v", err)
+			logger.Fatal("Failed to initialize Telegram client: %v", err)
 		}
-		log.Println("Telegram client initialized successfully")
+		logger.Info("Telegram client initialized successfully")
+	} else {
+		logger.Debug("Telegram notifications disabled")
 	}
 
 	// Setup graceful shutdown
@@ -80,16 +86,21 @@ func main() {
 
 	go func() {
 		<-sigChan
-		log.Println("Shutdown signal received, cleaning up...")
+		logger.Info("Shutdown signal received, cleaning up...")
 		cancel()
 	}()
 
 	// Start monitoring loop
-	log.Printf("Starting monitoring service (poll: %v, threshold: %.2f, window: %v, top_k: %d)",
+	logger.Info("Starting monitoring service (poll: %v, threshold: %.2f, window: %v, top_k: %d)",
 		cfg.Polymarket.PollInterval,
 		cfg.Monitor.Threshold,
 		cfg.Monitor.Window,
 		cfg.Monitor.TopK,
+	)
+	logger.Debug("Monitoring configuration: categories=%v, volume_24hr_min=%.0f, volume_filter_or=%v",
+		cfg.Polymarket.Categories,
+		cfg.Polymarket.Volume24hrMin,
+		cfg.Polymarket.VolumeFilterOR,
 	)
 
 	ticker := time.NewTicker(cfg.Polymarket.PollInterval)
@@ -99,8 +110,9 @@ func main() {
 	defer persistenceTicker.Stop()
 
 	// Run initial poll immediately
+	logger.Debug("Running initial monitoring cycle")
 	if err := runMonitoringCycle(ctx, polyClient, mon, store, telegramClient, cfg); err != nil {
-		log.Printf("Monitoring cycle failed: %v", err)
+		logger.Error("Monitoring cycle failed: %v", err)
 	}
 
 	for {
@@ -108,28 +120,32 @@ func main() {
 		case <-ctx.Done():
 			// Save state before shutdown
 			if err := store.Save(); err != nil {
-				log.Printf("Failed to save state: %v", err)
+				logger.Error("Failed to save state: %v", err)
+			} else {
+				logger.Info("State saved successfully before shutdown")
 			}
-			log.Println("Service stopped")
+			logger.Info("Service stopped")
 			return
 
 		case <-ticker.C:
+			logger.Debug("Starting scheduled monitoring cycle")
 			if err := runMonitoringCycle(ctx, polyClient, mon, store, telegramClient, cfg); err != nil {
-				log.Printf("Monitoring cycle failed: %v", err)
+				logger.Error("Monitoring cycle failed: %v", err)
 			}
 
 		case <-persistenceTicker.C:
 			if err := store.Save(); err != nil {
-				log.Printf("Failed to persist data: %v", err)
+				logger.Error("Failed to persist data: %v", err)
+			} else {
+				logger.Debug("Data persisted to disk successfully")
 			}
-			log.Println("Data persisted to disk")
 
 			// Rotate old data
 			if err := store.RotateSnapshots(); err != nil {
-				log.Printf("Failed to rotate snapshots: %v", err)
+				logger.Warn("Failed to rotate snapshots: %v", err)
 			}
 			if err := store.RotateEvents(); err != nil {
-				log.Printf("Failed to rotate events: %v", err)
+				logger.Warn("Failed to rotate events: %v", err)
 			}
 		}
 	}
@@ -144,9 +160,10 @@ func runMonitoringCycle(
 	cfg *config.Config,
 ) error {
 	startTime := time.Now()
-	log.Println("Starting monitoring cycle")
+	logger.Info("Starting monitoring cycle")
 
 	// Fetch events from Polymarket
+	logger.Debug("Fetching events from Polymarket API (categories: %v, limit: %d)", cfg.Polymarket.Categories, cfg.Polymarket.Limit)
 	events, err := polyClient.FetchEvents(
 		ctx,
 		cfg.Polymarket.Categories,
@@ -159,9 +176,12 @@ func runMonitoringCycle(
 	if err != nil {
 		return fmt.Errorf("failed to fetch events: %w", err)
 	}
-	log.Printf("Fetched %d events from %d categories", len(events), len(cfg.Polymarket.Categories))
+	logger.Info("Fetched %d events from %d categories", len(events), len(cfg.Polymarket.Categories))
 
 	// Update storage with new events and create snapshots
+	logger.Debug("Processing fetched events and creating snapshots")
+	newEvents := 0
+	updatedEvents := 0
 	for i := range events {
 		event := &events[i]
 
@@ -170,16 +190,18 @@ func runMonitoringCycle(
 		if err != nil {
 			// Event doesn't exist, create it
 			if err := store.AddEvent(event); err != nil {
-				log.Printf("Failed to add event %s: %v", event.ID, err)
+				logger.Warn("Failed to add event %s: %v", event.ID, err)
 				continue
 			}
+			newEvents++
 		} else {
 			// Update existing event
 			event.CreatedAt = existingEvent.CreatedAt
 			if err := store.UpdateEvent(event); err != nil {
-				log.Printf("Failed to update event %s: %v", event.ID, err)
+				logger.Warn("Failed to update event %s: %v", event.ID, err)
 				continue
 			}
+			updatedEvents++
 		}
 
 		// Create snapshot for current probability
@@ -193,15 +215,17 @@ func runMonitoringCycle(
 		}
 
 		if err := store.AddSnapshot(snapshot); err != nil {
-			log.Printf("Failed to add snapshot for event %s: %v", event.ID, err)
+			logger.Warn("Failed to add snapshot for event %s: %v", event.ID, err)
 		}
 	}
+	logger.Debug("Event processing complete: %d new, %d updated", newEvents, updatedEvents)
 
 	// Detect significant changes
 	allEvents, err := store.GetAllEvents()
 	if err != nil {
 		return fmt.Errorf("failed to get events: %w", err)
 	}
+	logger.Debug("Detecting changes across %d total events with threshold %.2f", len(allEvents), cfg.Monitor.Threshold)
 
 	changes, err := mon.DetectChanges(convertEvents(allEvents), cfg.Monitor.Threshold, cfg.Monitor.Window)
 	if err != nil {
@@ -209,37 +233,35 @@ func runMonitoringCycle(
 	}
 
 	// Clear old changes and store new ones
-	store.ClearChanges()
+	if err := store.ClearChanges(); err != nil {
+		logger.Warn("Failed to clear old changes: %v", err)
+	}
 	for i := range changes {
 		if err := store.AddChange(&changes[i]); err != nil {
-			log.Printf("Failed to add change: %v", err)
+			logger.Warn("Failed to add change: %v", err)
 		}
 	}
 
-	log.Printf("Detected %d significant changes", len(changes))
+	logger.Info("Detected %d significant changes", len(changes))
 
 	// Get top K changes and send notifications
 	if len(changes) > 0 && cfg.Telegram.Enabled && telegramClient != nil {
 		topChanges := mon.RankChanges(changes, cfg.Monitor.TopK)
+		logger.Debug("Ranked changes, sending top %d to Telegram", len(topChanges))
 
 		if err := telegramClient.Send(topChanges); err != nil {
-			log.Printf("Failed to send Telegram notification: %v", err)
+			logger.Error("Failed to send Telegram notification: %v", err)
 		} else {
-			log.Printf("Sent Telegram notification with top %d changes", len(topChanges))
+			logger.Info("Sent Telegram notification with top %d changes", len(topChanges))
 		}
+	} else if len(changes) > 0 {
+		logger.Debug("Changes detected but Telegram notifications disabled or client not initialized")
 	}
 
 	duration := time.Since(startTime)
-	log.Printf("Monitoring cycle completed in %v", duration)
+	logger.Info("Monitoring cycle completed in %v", duration)
 
 	return nil
-}
-
-func setupLogging(cfg config.LoggingConfig) {
-	// Terminal-only logging (outputs to stderr)
-	// No filesystem persistence for logs - keeps it simple and elegant
-	// Standard Go log package outputs to os.Stderr by default
-	log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
 }
 
 func generateID() string {

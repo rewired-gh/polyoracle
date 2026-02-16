@@ -1,3 +1,9 @@
+// Package telegram provides a client for sending notifications via Telegram Bot API.
+// It formats detected probability changes into human-readable messages and handles
+// delivery with retry logic for reliability.
+//
+// The client supports Markdown formatting and includes error handling for
+// common Telegram API issues like rate limiting and network failures.
 package telegram
 
 import (

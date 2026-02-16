@@ -6,18 +6,24 @@ import (
 	"time"
 )
 
-// Change represents a detected significant probability change for an event
+// Change represents a detected significant probability change for an event.
+// Changes are identified when probability movements exceed a configurable
+// threshold within a specified time window.
+//
+// Each Change captures the magnitude and direction of the probability shift,
+// along with the old and new probabilities, enabling users to understand
+// market sentiment changes over time.
 type Change struct {
 	ID             string        `json:"id"`
 	EventID        string        `json:"event_id"`
 	EventQuestion  string        `json:"event_question"`
-	Magnitude      float64       `json:"magnitude"`
+	Magnitude      float64       `json:"magnitude"` // Absolute probability change (0.0 to 1.0)
 	Direction      string        `json:"direction"` // "increase" or "decrease"
 	OldProbability float64       `json:"old_probability"`
 	NewProbability float64       `json:"new_probability"`
-	TimeWindow     time.Duration `json:"time_window"`
+	TimeWindow     time.Duration `json:"time_window"` // Duration over which change was detected
 	DetectedAt     time.Time     `json:"detected_at"`
-	Notified       bool          `json:"notified"`
+	Notified       bool          `json:"notified"` // Whether notification was sent
 }
 
 // Validate checks that all change fields are valid

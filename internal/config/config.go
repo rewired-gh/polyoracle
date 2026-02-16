@@ -1,3 +1,10 @@
+// Package config handles application configuration loading and validation.
+// It supports YAML configuration files with environment variable overrides,
+// providing a flexible and robust configuration system.
+//
+// Configuration is loaded from a YAML file and can be overridden with environment
+// variables prefixed with POLY_ORACLE_. All configuration values are validated
+// at startup to prevent runtime errors.
 package config
 
 import (
@@ -131,18 +138,18 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("polymarket.gamma_api_url", "https://gamma-api.polymarket.com")
 	v.SetDefault("polymarket.clob_api_url", "https://clob.polymarket.com")
 	v.SetDefault("polymarket.poll_interval", "1h") // 1 hour (matches notification rhythm)
-	// Categories default: only geopolitics, tech, finance
-	v.SetDefault("polymarket.categories", []string{"geopolitics", "tech", "finance"})
-	// Volume filters: lowered for geopolitics/tech/finance (lower-volume categories)
-	v.SetDefault("polymarket.volume_24hr_min", 10000.0)   // $10K minimum
-	v.SetDefault("polymarket.volume_1wk_min", 50000.0)    // $50K weekly
-	v.SetDefault("polymarket.volume_1mo_min", 100000.0)   // $100K monthly
-	v.SetDefault("polymarket.volume_filter_or", true)     // true = OR (union)
+	// Categories default: include crypto and world for broader coverage
+	v.SetDefault("polymarket.categories", []string{"geopolitics", "tech", "finance", "crypto", "world"})
+	// Volume filters: optimized based on analysis of 228 events
+	v.SetDefault("polymarket.volume_24hr_min", 25000.0) // $25K minimum
+	v.SetDefault("polymarket.volume_1wk_min", 100000.0) // $100K weekly
+	v.SetDefault("polymarket.volume_1mo_min", 250000.0) // $250K monthly
+	v.SetDefault("polymarket.volume_filter_or", true)   // true = OR (union)
 	v.SetDefault("polymarket.limit", 200)
 	v.SetDefault("polymarket.timeout", "30s")
 
 	// Monitor defaults
-	v.SetDefault("monitor.threshold", 0.05) // 5% change (sensitive but not noisy)
+	v.SetDefault("monitor.threshold", 0.04) // 4% change (meaningful movements)
 	v.SetDefault("monitor.window", "1h")
 	v.SetDefault("monitor.top_k", 5) // Top 5 events (digestible)
 	v.SetDefault("monitor.enabled", true)
