@@ -1,0 +1,54 @@
+package models
+
+import (
+	"errors"
+	"math"
+	"time"
+)
+
+// Change represents a detected significant probability change for an event
+type Change struct {
+	ID             string        `json:"id"`
+	EventID        string        `json:"event_id"`
+	EventQuestion  string        `json:"event_question"`
+	Magnitude      float64       `json:"magnitude"`
+	Direction      string        `json:"direction"` // "increase" or "decrease"
+	OldProbability float64       `json:"old_probability"`
+	NewProbability float64       `json:"new_probability"`
+	TimeWindow     time.Duration `json:"time_window"`
+	DetectedAt     time.Time     `json:"detected_at"`
+	Notified       bool          `json:"notified"`
+}
+
+// Validate checks that all change fields are valid
+func (c *Change) Validate() error {
+	if c.ID == "" {
+		return errors.New("change ID must not be empty")
+	}
+	if c.EventID == "" {
+		return errors.New("event ID must not be empty")
+	}
+	if c.Magnitude < 0.0 || c.Magnitude > 1.0 {
+		return errors.New("magnitude must be between 0.0 and 1.0")
+	}
+
+	// Verify magnitude equals absolute difference
+	expectedMagnitude := math.Abs(c.NewProbability - c.OldProbability)
+	if math.Abs(c.Magnitude-expectedMagnitude) > 0.001 {
+		return errors.New("magnitude must equal |new_probability - old_probability|")
+	}
+
+	if c.Direction != "increase" && c.Direction != "decrease" {
+		return errors.New("direction must be 'increase' or 'decrease'")
+	}
+	if c.OldProbability < 0.0 || c.OldProbability > 1.0 {
+		return errors.New("old probability must be between 0.0 and 1.0")
+	}
+	if c.NewProbability < 0.0 || c.NewProbability > 1.0 {
+		return errors.New("new probability must be between 0.0 and 1.0")
+	}
+	if c.DetectedAt.After(time.Now()) {
+		return errors.New("detected at must not be in the future")
+	}
+	return nil
+}
