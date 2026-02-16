@@ -33,8 +33,14 @@ type PersistenceFile struct {
 	Snapshots map[string][]models.Snapshot `json:"snapshots"`
 }
 
-// New creates a new Storage instance
+// New creates a new Storage instance with persistence to tmp directory
+// If filePath is empty, uses OS-appropriate tmp directory
 func New(maxEvents, maxSnapshotsPerEvent int, filePath string) *Storage {
+	// Use OS-appropriate tmp directory if no path provided
+	if filePath == "" {
+		filePath = filepath.Join(os.TempDir(), "poly-oracle", "data.json")
+	}
+
 	return &Storage{
 		events:               make(map[string]*models.Event),
 		snapshots:            make(map[string][]models.Snapshot),

@@ -64,12 +64,13 @@ Where:
 - [x] T020 Implement AddEvent, GetEvent, GetAllEvents, UpdateEvent in internal/storage/storage.go
 - [x] T021 Implement AddSnapshot, GetSnapshots, GetSnapshotsInWindow in internal/storage/storage.go
 - [x] T022 Implement AddChange, GetTopChanges, ClearChanges in internal/storage/storage.go
-- [x] T023 Implement Save method in internal/storage/storage.go for JSON persistence
-- [x] T024 Implement Load method in internal/storage/storage.go for JSON restoration
-- [x] T025 Implement RotateSnapshots method in internal/storage/storage.go respecting max_snapshots_per_event
-- [x] T026 Implement RotateEvents method in internal/storage/storage.go respecting max_events
-- [x] T027 Implement thread-safety with sync.RWMutex in all Storage methods
-- [x] T028 [P] Write unit tests for storage package in internal/storage/storage_test.go
+- [x] T023 Implement RotateSnapshots method in internal/storage/storage.go respecting max_snapshots_per_event
+- [x] T024 Implement RotateEvents method in internal/storage/storage.go respecting max_events
+- [x] T025 Implement thread-safety with sync.RWMutex in all Storage methods
+- [x] T026 [P] Write unit tests for storage package in internal/storage/storage_test.go
+- [x] T027 Implement Save method using OS-appropriate tmp directory (/tmp on macOS/Linux) in internal/storage/storage.go
+- [x] T028 Implement Load method from OS-appropriate tmp directory in internal/storage/storage.go
+- [x] T029 Update config to use proper tmp path for data persistence in configs/config.yaml.example
 
 ---
 
@@ -130,7 +131,7 @@ Where:
 
 - [x] T045 [US1] Implement service orchestration in cmd/poly-oracle/main.go (load config, initialize components)
 - [x] T046 [US1] Implement graceful shutdown handling in cmd/poly-oracle/main.go
-- [x] T047 [US1] Implement logging setup in cmd/poly-oracle/main.go (structured JSON logging)
+- [x] T047 [US1] Implement terminal-only logging setup in cmd/poly-oracle/main.go (no filesystem persistence)
 - [x] T048 [US1] Wire all components together in cmd/poly-oracle/main.go (storage, polymarket client, monitor, notifier)
 - [x] T049 [US1] Write integration test for end-to-end flow in tests/integration/e2e_test.go
 

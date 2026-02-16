@@ -236,8 +236,9 @@ func runMonitoringCycle(
 }
 
 func setupLogging(cfg config.LoggingConfig) {
-	// For now, use standard Go logging
-	// In production, you'd integrate with a structured logging library
+	// Terminal-only logging (outputs to stderr)
+	// No filesystem persistence for logs - keeps it simple and elegant
+	// Standard Go log package outputs to os.Stderr by default
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
 }
 

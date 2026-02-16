@@ -193,6 +193,23 @@ func TestStorage_RotateSnapshots(t *testing.T) {
 	}
 }
 
+func TestStorage_EmptyFilePathUsesTmpDir(t *testing.T) {
+	// Test that empty file path uses OS tmp directory
+	s := New(100, 50, "") // Empty file path
+
+	// Verify file path contains OS tmp directory and poly-oracle subdirectory
+	expectedSuffix := "poly-oracle/data.json"
+	if s.filePath == "" {
+		t.Error("File path should not be empty")
+	}
+	if len(s.filePath) < len(expectedSuffix) {
+		t.Errorf("File path too short: %s", s.filePath)
+	}
+	if s.filePath[len(s.filePath)-len(expectedSuffix):] != expectedSuffix {
+		t.Errorf("Expected file path to end with '%s', got '%s'", expectedSuffix, s.filePath)
+	}
+}
+
 func TestStorage_SaveAndLoad(t *testing.T) {
 	tempFile := "/tmp/test-poly-oracle-save.json"
 	defer os.Remove(tempFile)

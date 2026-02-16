@@ -75,6 +75,42 @@ func Load(path string) (*Config, error) {
 	v.SetEnvPrefix("POLY_ORACLE")
 	v.AutomaticEnv()
 
+	// Bind environment variables to nested config keys
+	// Polymarket
+	_ = v.BindEnv("polymarket.gamma_api_url", "POLY_ORACLE_POLYMARKET_GAMMA_API_URL")
+	_ = v.BindEnv("polymarket.clob_api_url", "POLY_ORACLE_POLYMARKET_CLOB_API_URL")
+	_ = v.BindEnv("polymarket.poll_interval", "POLY_ORACLE_POLYMARKET_POLL_INTERVAL")
+	_ = v.BindEnv("polymarket.categories", "POLY_ORACLE_POLYMARKET_CATEGORIES")
+	_ = v.BindEnv("polymarket.volume_24hr_min", "POLY_ORACLE_POLYMARKET_VOLUME_24HR_MIN")
+	_ = v.BindEnv("polymarket.volume_1wk_min", "POLY_ORACLE_POLYMARKET_VOLUME_1WK_MIN")
+	_ = v.BindEnv("polymarket.volume_1mo_min", "POLY_ORACLE_POLYMARKET_VOLUME_1MO_MIN")
+	_ = v.BindEnv("polymarket.volume_filter_or", "POLY_ORACLE_POLYMARKET_VOLUME_FILTER_OR")
+	_ = v.BindEnv("polymarket.limit", "POLY_ORACLE_POLYMARKET_LIMIT")
+	_ = v.BindEnv("polymarket.timeout", "POLY_ORACLE_POLYMARKET_TIMEOUT")
+
+	// Monitor
+	_ = v.BindEnv("monitor.threshold", "POLY_ORACLE_MONITOR_THRESHOLD")
+	_ = v.BindEnv("monitor.window", "POLY_ORACLE_MONITOR_WINDOW")
+	_ = v.BindEnv("monitor.top_k", "POLY_ORACLE_MONITOR_TOP_K")
+	_ = v.BindEnv("monitor.enabled", "POLY_ORACLE_MONITOR_ENABLED")
+
+	// Telegram
+	_ = v.BindEnv("telegram.bot_token", "POLY_ORACLE_TELEGRAM_BOT_TOKEN")
+	_ = v.BindEnv("telegram.chat_id", "POLY_ORACLE_TELEGRAM_CHAT_ID")
+	_ = v.BindEnv("telegram.enabled", "POLY_ORACLE_TELEGRAM_ENABLED")
+
+	// Storage
+	_ = v.BindEnv("storage.max_events", "POLY_ORACLE_STORAGE_MAX_EVENTS")
+	_ = v.BindEnv("storage.max_snapshots_per_event", "POLY_ORACLE_STORAGE_MAX_SNAPSHOTS_PER_EVENT")
+	_ = v.BindEnv("storage.max_file_size_mb", "POLY_ORACLE_STORAGE_MAX_FILE_SIZE_MB")
+	_ = v.BindEnv("storage.persistence_interval", "POLY_ORACLE_STORAGE_PERSISTENCE_INTERVAL")
+	_ = v.BindEnv("storage.file_path", "POLY_ORACLE_STORAGE_FILE_PATH")
+	_ = v.BindEnv("storage.data_dir", "POLY_ORACLE_STORAGE_DATA_DIR")
+
+	// Logging
+	_ = v.BindEnv("logging.level", "POLY_ORACLE_LOGGING_LEVEL")
+	_ = v.BindEnv("logging.format", "POLY_ORACLE_LOGGING_FORMAT")
+
 	// Read config file
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
@@ -94,27 +130,30 @@ func setDefaults(v *viper.Viper) {
 	// Polymarket defaults
 	v.SetDefault("polymarket.gamma_api_url", "https://gamma-api.polymarket.com")
 	v.SetDefault("polymarket.clob_api_url", "https://clob.polymarket.com")
-	v.SetDefault("polymarket.poll_interval", "5m")
-	v.SetDefault("polymarket.volume_24hr_min", 0.0)   // 0 = no filter
-	v.SetDefault("polymarket.volume_1wk_min", 0.0)    // 0 = no filter
-	v.SetDefault("polymarket.volume_1mo_min", 0.0)    // 0 = no filter
-	v.SetDefault("polymarket.volume_filter_or", true) // true = OR (union), false = AND (intersection)
-	v.SetDefault("polymarket.limit", 100)
+	v.SetDefault("polymarket.poll_interval", "1h") // 1 hour (matches notification rhythm)
+	// Categories default: only geopolitics, tech, finance
+	v.SetDefault("polymarket.categories", []string{"geopolitics", "tech", "finance"})
+	// Volume filters: lowered for geopolitics/tech/finance (lower-volume categories)
+	v.SetDefault("polymarket.volume_24hr_min", 10000.0)   // $10K minimum
+	v.SetDefault("polymarket.volume_1wk_min", 50000.0)    // $50K weekly
+	v.SetDefault("polymarket.volume_1mo_min", 100000.0)   // $100K monthly
+	v.SetDefault("polymarket.volume_filter_or", true)     // true = OR (union)
+	v.SetDefault("polymarket.limit", 200)
 	v.SetDefault("polymarket.timeout", "30s")
 
 	// Monitor defaults
-	v.SetDefault("monitor.threshold", 0.10)
+	v.SetDefault("monitor.threshold", 0.05) // 5% change (sensitive but not noisy)
 	v.SetDefault("monitor.window", "1h")
-	v.SetDefault("monitor.top_k", 10)
+	v.SetDefault("monitor.top_k", 5) // Top 5 events (digestible)
 	v.SetDefault("monitor.enabled", true)
 
 	// Storage defaults
 	v.SetDefault("storage.max_events", 1000)
-	v.SetDefault("storage.max_snapshots_per_event", 100)
+	v.SetDefault("storage.max_snapshots_per_event", 24) // 24 hourly snapshots
 	v.SetDefault("storage.max_file_size_mb", 100)
-	v.SetDefault("storage.persistence_interval", "5m")
-	v.SetDefault("storage.file_path", "./data/poly-oracle.json")
-	v.SetDefault("storage.data_dir", "./data")
+	v.SetDefault("storage.persistence_interval", "1h") // Matches poll interval
+	v.SetDefault("storage.file_path", "")              // Empty = OS tmp directory
+	v.SetDefault("storage.data_dir", "")               // Empty = OS tmp directory
 
 	// Logging defaults
 	v.SetDefault("logging.level", "info")
@@ -183,9 +222,7 @@ func (c *Config) Validate() error {
 	if c.Storage.PersistenceInterval < 1*time.Minute {
 		return fmt.Errorf("storage.persistence_interval must be at least 1 minute")
 	}
-	if c.Storage.FilePath == "" {
-		return fmt.Errorf("storage.file_path is required")
-	}
+	// FilePath can be empty - storage layer will use OS tmp directory
 
 	// Validate Logging config
 	validLogLevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}

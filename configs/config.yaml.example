@@ -1,29 +1,42 @@
 # Poly Oracle Configuration Example
 # Copy this file to config.yaml and adjust values as needed
+#
+# This configuration is optimized for daily use - it extracts high-value signals
+# from Polymarket while avoiding notification flood. The defaults focus on:
+# - Significant events with real market activity (volume filtering)
+# - Meaningful probability changes (not minor fluctuations)
+# - Digestible notifications (3-5 key events per cycle)
+#
+# Based on real Polymarket API analysis (see docs/configuration-experiment-results.md):
+# - Top 14% of events by volume contain 70% of total market activity
+# - Probabilities are stable over short periods (meaningful changes happen over hours)
+# - Geopolitics/tech/finance have lower volume than sports, but higher insight value
+# - Expect ~5-15 monitored events (these are niche categories)
 
 # Polymarket API configuration
 polymarket:
   gamma_api_url: "https://gamma-api.polymarket.com"
   clob_api_url: "https://clob.polymarket.com"
-  poll_interval: 1h                                  # Poll every hour for hourly notifications
-  categories:                                        # Event categories to monitor
+  poll_interval: 1h                                  # Poll every hour (matches notification rhythm)
+  categories:                                        # Only the categories you care about
+    - geopolitics
     - tech
     - finance
-    - geopolitics
   # Volume filtering (logical OR): Include event if ANY volume threshold is met
-  # Set to 0 to disable filtering for that timeframe
-  volume_24hr_min: 10000.0      # Minimum $10K 24-hour volume
-  volume_1wk_min: 50000.0       # Minimum $50K 1-week volume
-  volume_1mo_min: 200000.0      # Minimum $200K 1-month volume
+  # Lower thresholds for geopolitics/tech/finance (these are lower-volume categories)
+  # Ensures we capture quality events in your specific areas of interest
+  volume_24hr_min: 1000.0       # $1K minimum (captures active markets in these categories)
+  volume_1wk_min: 5000.0        # $5K weekly volume (sustained interest)
+  volume_1mo_min: 10000.0       # $10K monthly volume (established markets)
   volume_filter_or: true        # true = OR (union), false = AND (intersection)
-  limit: 100                    # Maximum events to fetch per cycle
+  limit: 200                    # Fetch enough events to find quality signals
   timeout: 30s                  # API request timeout
 
 # Monitoring behavior configuration
 monitor:
-  threshold: 0.05        # 5% change threshold (sensitive enough for 0-5 events/hour)
+  threshold: 0.05        # 5% change threshold (sensitive but not noisy)
   window: 1h             # 1-hour time window (matches poll interval)
-  top_k: 5               # Max 5 events per notification (0-5 range, avg 3)
+  top_k: 5               # Top 5 events per notification (digestible amount)
   enabled: true          # Enable monitoring
 
 # Telegram notification configuration
@@ -38,8 +51,8 @@ storage:
   max_snapshots_per_event: 24               # 24 hours of hourly snapshots
   max_file_size_mb: 100                     # Maximum persistence file size in MB
   persistence_interval: 1h                  # Save to disk every hour (matches poll interval)
-  file_path: "./data/poly-oracle.json"      # Path to persistence file
-  data_dir: "./data"                        # Directory for data storage
+  file_path: ""                             # Empty = use OS tmp dir (/tmp/poly-oracle/data.json on macOS/Linux)
+  data_dir: ""                              # Empty = use OS tmp dir
 
 # Logging configuration
 logging:
@@ -49,5 +62,5 @@ logging:
 # Environment variables can override any value:
 # POLY_ORACLE_TELEGRAM_BOT_TOKEN=your_token
 # POLY_ORACLE_TELEGRAM_CHAT_ID=your_chat_id
-# POLY_ORACLE_MONITOR_THRESHOLD=0.10
-
+# POLY_ORACLE_MONITOR_THRESHOLD=0.05
+# POLY_ORACLE_POLYMARKET_POLL_INTERVAL=1h
