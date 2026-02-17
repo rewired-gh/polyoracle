@@ -26,7 +26,8 @@ type Change struct {
 	NewProbability float64       `json:"new_probability"`
 	TimeWindow     time.Duration `json:"time_window"` // Duration over which change was detected
 	DetectedAt     time.Time     `json:"detected_at"`
-	Notified       bool          `json:"notified"` // Whether notification was sent
+	Notified       bool          `json:"notified"`               // Whether notification was sent
+	SignalScore    float64       `json:"signal_score,omitempty"` // composite score from scoring algorithm; 0 = unscored
 }
 
 // Validate checks that all change fields are valid

@@ -3,6 +3,8 @@
 Auto-generated from all feature plans. Last updated: 2026-02-16
 
 ## Active Technologies
+- Go 1.24+ (latest stable) + None new. `math` stdlib for `math.Log`, `math.Sqrt`, `math.Abs`. (001-smart-ranking)
+- Existing in-memory + JSON persistence. `storage.GetSnapshots(eventID)` (already (001-smart-ranking)
 
 - Go 1.24+ (latest stable) (001-probability-monitor)
 
@@ -175,6 +177,7 @@ Each market is monitored separately for probability changes.
 Go 1.24+ (latest stable): Follow standard conventions
 
 ## Recent Changes
+- 001-smart-ranking: Added Go 1.24+ (latest stable) + None new. `math` stdlib for `math.Log`, `math.Sqrt`, `math.Abs`.
 
 - 001-probability-monitor: Added Go 1.24+ (latest stable)
 

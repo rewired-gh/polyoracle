@@ -100,10 +100,9 @@ func main() {
 	}()
 
 	// Start monitoring loop
-	logger.Info("Starting monitoring service (poll: %v, threshold: %.2f, window: %v, top_k: %d)",
+	logger.Info("Starting monitoring service (interval: %v, sensitivity: %.2f, top_k: %d)",
 		cfg.Polymarket.PollInterval,
-		cfg.Monitor.Threshold,
-		cfg.Monitor.Window,
+		cfg.Monitor.Sensitivity,
 		cfg.Monitor.TopK,
 	)
 	logger.Debug("Monitoring configuration: categories=%v, volume_24hr_min=%.0f, volume_filter_or=%v",
@@ -114,9 +113,6 @@ func main() {
 
 	ticker := time.NewTicker(cfg.Polymarket.PollInterval)
 	defer ticker.Stop()
-
-	persistenceTicker := time.NewTicker(cfg.Storage.PersistenceInterval)
-	defer persistenceTicker.Stop()
 
 	// Run initial poll immediately
 	logger.Debug("Running initial monitoring cycle")
@@ -142,8 +138,7 @@ func main() {
 				logger.Error("Monitoring cycle failed: %v", err)
 			}
 
-		case <-persistenceTicker.C:
-			// Retry persistence with exponential backoff
+			// Persist data after each cycle
 			var saveErr error
 			for attempt := 0; attempt <= cfg.Storage.PersistenceRetries; attempt++ {
 				if err := store.Save(); err == nil {
@@ -250,9 +245,9 @@ func runMonitoringCycle(
 	if err != nil {
 		return fmt.Errorf("failed to get events: %w", err)
 	}
-	logger.Debug("Detecting changes across %d total events with threshold %.2f", len(allEvents), cfg.Monitor.Threshold)
+	logger.Debug("Detecting changes across %d total events", len(allEvents))
 
-	changes, detectionErrors, err := mon.DetectChanges(convertEvents(allEvents), cfg.Monitor.Threshold, cfg.Monitor.Window)
+	changes, detectionErrors, err := mon.DetectChanges(convertEvents(allEvents), cfg.Polymarket.PollInterval+time.Minute)
 	if err != nil {
 		return fmt.Errorf("failed to detect changes: %w", err)
 	}
@@ -270,20 +265,31 @@ func runMonitoringCycle(
 		}
 	}
 
-	logger.Info("Detected %d significant changes", len(changes))
+	logger.Info("Detected %d changes above floor", len(changes))
 
-	// Get top K changes and send notifications
-	if len(changes) > 0 && cfg.Telegram.Enabled && telegramClient != nil {
-		topChanges := mon.RankChanges(changes, cfg.Monitor.TopK)
-		logger.Debug("Ranked changes, sending top %d to Telegram", len(topChanges))
+	// Score and rank changes using composite signal quality
+	// Scale threshold by window duration for mathematical soundness
+	windowHours := cfg.Polymarket.PollInterval.Hours()
+	minScore := cfg.Monitor.MinCompositeScore() * windowHours
+	eventsMap := buildEventsMap(allEvents)
+	topChanges := mon.ScoreAndRank(changes, eventsMap, minScore, cfg.Monitor.TopK)
 
-		if err := telegramClient.Send(topChanges); err != nil {
-			logger.Error("Failed to send Telegram notification: %v", err)
+	if len(topChanges) > 0 {
+		logger.Info("Scored changes: %d detected, %d passed quality bar (min_score=%.4f)",
+			len(changes), len(topChanges), minScore)
+
+		if cfg.Telegram.Enabled && telegramClient != nil {
+			logger.Debug("Sending top %d changes to Telegram", len(topChanges))
+			if err := telegramClient.Send(topChanges); err != nil {
+				logger.Error("Failed to send Telegram notification: %v", err)
+			} else {
+				logger.Info("Sent Telegram notification with top %d changes", len(topChanges))
+			}
 		} else {
-			logger.Info("Sent Telegram notification with top %d changes", len(topChanges))
+			logger.Debug("Changes detected but Telegram notifications disabled or client not initialized")
 		}
-	} else if len(changes) > 0 {
-		logger.Debug("Changes detected but Telegram notifications disabled or client not initialized")
+	} else {
+		logger.Info("No changes above quality bar this cycle (min_score=%.4f)", minScore)
 	}
 
 	duration := time.Since(startTime)
@@ -300,6 +306,14 @@ func convertEvents(events []*models.Event) []models.Event {
 	result := make([]models.Event, len(events))
 	for i, event := range events {
 		result[i] = *event
+	}
+	return result
+}
+
+func buildEventsMap(events []*models.Event) map[string]*models.Event {
+	result := make(map[string]*models.Event, len(events))
+	for _, event := range events {
+		result[event.ID] = event
 	}
 	return result
 }

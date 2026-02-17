@@ -90,7 +90,7 @@ func Warn(format string, args ...interface{}) {
 func Error(format string, args ...interface{}) {
 	if defaultLogger != nil && defaultLogger.level <= ErrorLevel {
 		msg := fmt.Sprintf("[ERROR] "+format, args...)
-		defaultLogger.logger.Output(2, msg)
+		_ = defaultLogger.logger.Output(2, msg)
 	}
 }
 
@@ -98,7 +98,7 @@ func Error(format string, args ...interface{}) {
 func Fatal(format string, args ...interface{}) {
 	msg := fmt.Sprintf("[FATAL] "+format, args...)
 	if defaultLogger != nil {
-		defaultLogger.logger.Output(2, msg)
+		_ = defaultLogger.logger.Output(2, msg)
 	} else {
 		log.Fatal(msg)
 	}
