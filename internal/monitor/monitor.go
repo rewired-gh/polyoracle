@@ -29,23 +29,35 @@ func New(s *storage.Storage) *Monitor {
 	}
 }
 
-// DetectChanges identifies significant probability changes within a time window
-func (m *Monitor) DetectChanges(events []models.Event, threshold float64, window time.Duration) ([]models.Change, error) {
+// DetectionError represents a per-event error during change detection
+type DetectionError struct {
+	EventID string
+	Err     error
+}
+
+func (e DetectionError) Error() string {
+	return fmt.Sprintf("detection error for event %s: %v", e.EventID, e.Err)
+}
+
+// DetectChanges identifies significant probability changes within a time window.
+// Returns changes, per-event errors (non-fatal), and a fatal error if parameters are invalid.
+func (m *Monitor) DetectChanges(events []models.Event, threshold float64, window time.Duration) ([]models.Change, []DetectionError, error) {
 	if threshold < 0 || threshold > 1 {
-		return nil, fmt.Errorf("invalid threshold %.2f: must be between 0 and 1", threshold)
+		return nil, nil, fmt.Errorf("invalid threshold %.2f: must be between 0 and 1", threshold)
 	}
 	if window <= 0 {
-		return nil, fmt.Errorf("invalid window %v: must be positive", window)
+		return nil, nil, fmt.Errorf("invalid window %v: must be positive", window)
 	}
 
 	var changes []models.Change
+	var detectionErrors []DetectionError
 	now := time.Now()
 
 	for _, event := range events {
 		// Get snapshots within the time window
 		snapshots, err := m.storage.GetSnapshotsInWindow(event.ID, window)
 		if err != nil {
-			// Log error but continue processing other events
+			detectionErrors = append(detectionErrors, DetectionError{EventID: event.ID, Err: err})
 			continue
 		}
 
@@ -88,7 +100,7 @@ func (m *Monitor) DetectChanges(events []models.Event, threshold float64, window
 		}
 	}
 
-	return changes, nil
+	return changes, detectionErrors, nil
 }
 
 // RankChanges sorts changes by magnitude and returns top K

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
@@ -10,7 +11,7 @@ import (
 )
 
 func TestStorage_AddAndGetEvent(t *testing.T) {
-	s := New(100, 50, "/tmp/test-storage.json")
+	s := New(100, 50, "/tmp/test-storage.json", 0644, 0755)
 
 	now := time.Now()
 	event := &models.Event{
@@ -42,7 +43,7 @@ func TestStorage_AddAndGetEvent(t *testing.T) {
 }
 
 func TestStorage_AddSnapshot(t *testing.T) {
-	s := New(100, 50, "/tmp/test-storage.json")
+	s := New(100, 50, "/tmp/test-storage.json", 0644, 0755)
 
 	// Add event first
 	now := time.Now()
@@ -87,7 +88,7 @@ func TestStorage_AddSnapshot(t *testing.T) {
 }
 
 func TestStorage_GetTopChanges(t *testing.T) {
-	s := New(100, 50, "/tmp/test-storage.json")
+	s := New(100, 50, "/tmp/test-storage.json", 0644, 0755)
 
 	// Add multiple changes
 	changes := []*models.Change{
@@ -154,7 +155,7 @@ func TestStorage_GetTopChanges(t *testing.T) {
 }
 
 func TestStorage_RotateSnapshots(t *testing.T) {
-	s := New(100, 3, "/tmp/test-storage.json") // Max 3 snapshots per event
+	s := New(100, 3, "/tmp/test-storage.json", 0644, 0755) // Max 3 snapshots per event
 
 	// Add event
 	now := time.Now()
@@ -202,7 +203,7 @@ func TestStorage_RotateSnapshots(t *testing.T) {
 
 func TestStorage_EmptyFilePathUsesTmpDir(t *testing.T) {
 	// Test that empty file path uses OS tmp directory
-	s := New(100, 50, "") // Empty file path
+	s := New(100, 50, "", 0644, 0755) // Empty file path
 
 	// Verify file path contains OS tmp directory and poly-oracle subdirectory
 	expectedSuffix := "poly-oracle/data.json"
@@ -221,7 +222,7 @@ func TestStorage_SaveAndLoad(t *testing.T) {
 	tempFile := "/tmp/test-poly-oracle-save.json"
 	defer func() { _ = os.Remove(tempFile) }()
 
-	s := New(100, 50, tempFile)
+	s := New(100, 50, tempFile, 0644, 0755)
 
 	// Add test data
 	now := time.Now()
@@ -246,7 +247,7 @@ func TestStorage_SaveAndLoad(t *testing.T) {
 	}
 
 	// Create new storage and load
-	s2 := New(100, 50, tempFile)
+	s2 := New(100, 50, tempFile, 0644, 0755)
 	if err := s2.Load(); err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
@@ -259,5 +260,360 @@ func TestStorage_SaveAndLoad(t *testing.T) {
 
 	if loaded.Title != "Test?" {
 		t.Errorf("Expected question 'Test?', got '%s'", loaded.Title)
+	}
+}
+
+func TestStorage_GetSnapshotsInWindow_Sorted(t *testing.T) {
+	s := New(100, 50, "/tmp/test-storage.json", 0644, 0755)
+
+	// Add event
+	now := time.Now()
+	event := &models.Event{
+		ID:             "event-1",
+		EventID:        "event-1",
+		Title:          "Test?",
+		Category:       "politics",
+		YesProbability: 0.75,
+		NoProbability:  0.25,
+		Active:         true,
+		LastUpdated:    now,
+		CreatedAt:      now.Add(-1 * time.Hour),
+	}
+	if err := s.AddEvent(event); err != nil {
+		t.Fatalf("Failed to add event: %v", err)
+	}
+
+	// Add 5 snapshots OUT OF ORDER (intentionally not chronological)
+	timestamps := []time.Time{
+		now.Add(-10 * time.Minute), // 3rd oldest
+		now.Add(-30 * time.Minute), // oldest
+		now.Add(-5 * time.Minute),  // 4th oldest (most recent)
+		now.Add(-20 * time.Minute), // 2nd oldest
+		now.Add(-8 * time.Minute),  // 3rd oldest
+	}
+
+	for i, ts := range timestamps {
+		snapshot := &models.Snapshot{
+			ID:             fmt.Sprintf("snap-%d", i),
+			EventID:        "event-1",
+			YesProbability: float64(50+i*10) / 100.0,
+			NoProbability:  float64(50-i*10) / 100.0,
+			Timestamp:      ts,
+			Source:         "test",
+		}
+		if err := s.AddSnapshot(snapshot); err != nil {
+			t.Fatalf("Failed to add snapshot %d: %v", i, err)
+		}
+	}
+
+	// Get snapshots in 1 hour window (should get all 5)
+	snapshots, err := s.GetSnapshotsInWindow("event-1", time.Hour)
+	if err != nil {
+		t.Fatalf("GetSnapshotsInWindow failed: %v", err)
+	}
+
+	if len(snapshots) != 5 {
+		t.Errorf("Expected 5 snapshots, got %d", len(snapshots))
+	}
+
+	// Verify snapshots are sorted by timestamp ascending (oldest first)
+	for i := 0; i < len(snapshots)-1; i++ {
+		if !snapshots[i].Timestamp.Before(snapshots[i+1].Timestamp) {
+			t.Errorf("Snapshots not sorted: snapshot[%d] timestamp %v is not before snapshot[%d] timestamp %v",
+				i, snapshots[i].Timestamp, i+1, snapshots[i+1].Timestamp)
+		}
+	}
+
+	// Verify oldest is first, newest is last
+	if snapshots[0].Timestamp.Unix() != now.Add(-30*time.Minute).Unix() {
+		t.Errorf("First snapshot should be oldest (30 min ago), got %v", snapshots[0].Timestamp)
+	}
+	if snapshots[len(snapshots)-1].Timestamp.Unix() != now.Add(-5*time.Minute).Unix() {
+		t.Errorf("Last snapshot should be newest (5 min ago), got %v", snapshots[len(snapshots)-1].Timestamp)
+	}
+}
+
+func TestStorage_UpdateEvent(t *testing.T) {
+	s := New(100, 50, "/tmp/test-storage.json", 0644, 0755)
+
+	now := time.Now()
+	event := &models.Event{
+		ID:             "test-event",
+		EventID:        "test-event",
+		Title:          "Original Title",
+		Category:       "politics",
+		YesProbability: 0.75,
+		NoProbability:  0.25,
+		Active:         true,
+		LastUpdated:    now,
+		CreatedAt:      now.Add(-1 * time.Hour),
+	}
+	if err := s.AddEvent(event); err != nil {
+		t.Fatalf("AddEvent failed: %v", err)
+	}
+
+	// Update the event
+	event.Title = "Updated Title"
+	event.YesProbability = 0.80
+	event.NoProbability = 0.20
+
+	if err := s.UpdateEvent(event); err != nil {
+		t.Errorf("UpdateEvent failed: %v", err)
+	}
+
+	// Verify update
+	retrieved, err := s.GetEvent("test-event")
+	if err != nil {
+		t.Fatalf("GetEvent after update failed: %v", err)
+	}
+	if retrieved.Title != "Updated Title" {
+		t.Errorf("Expected title 'Updated Title', got '%s'", retrieved.Title)
+	}
+	if retrieved.YesProbability != 0.80 {
+		t.Errorf("Expected YesProbability 0.80, got %.2f", retrieved.YesProbability)
+	}
+}
+
+func TestStorage_UpdateEvent_NotFound(t *testing.T) {
+	s := New(100, 50, "/tmp/test-storage.json", 0644, 0755)
+
+	now := time.Now()
+	event := &models.Event{
+		ID:             "nonexistent",
+		EventID:        "nonexistent",
+		Title:          "Does Not Exist",
+		Category:       "politics",
+		YesProbability: 0.50,
+		NoProbability:  0.50,
+		Active:         true,
+		LastUpdated:    now,
+		CreatedAt:      now.Add(-1 * time.Hour),
+	}
+
+	err := s.UpdateEvent(event)
+	if err == nil {
+		t.Error("Expected error when updating nonexistent event, got nil")
+	}
+}
+
+func TestStorage_GetAllEvents(t *testing.T) {
+	s := New(100, 50, "/tmp/test-storage.json", 0644, 0755)
+
+	// Initially empty
+	events, err := s.GetAllEvents()
+	if err != nil {
+		t.Fatalf("GetAllEvents on empty storage failed: %v", err)
+	}
+	if len(events) != 0 {
+		t.Errorf("Expected 0 events, got %d", len(events))
+	}
+
+	// Add 3 events
+	now := time.Now()
+	for i := 0; i < 3; i++ {
+		event := &models.Event{
+			ID:             fmt.Sprintf("event-%d", i),
+			EventID:        fmt.Sprintf("event-%d", i),
+			Title:          fmt.Sprintf("Test Event %d", i),
+			Category:       "politics",
+			YesProbability: 0.50,
+			NoProbability:  0.50,
+			Active:         true,
+			LastUpdated:    now,
+			CreatedAt:      now.Add(-1 * time.Hour),
+		}
+		if err := s.AddEvent(event); err != nil {
+			t.Fatalf("AddEvent failed: %v", err)
+		}
+	}
+
+	// GetAllEvents should return all 3
+	events, err = s.GetAllEvents()
+	if err != nil {
+		t.Fatalf("GetAllEvents failed: %v", err)
+	}
+	if len(events) != 3 {
+		t.Errorf("Expected 3 events, got %d", len(events))
+	}
+}
+
+func TestStorage_RotateEvents(t *testing.T) {
+	maxEvents := 5
+	s := New(maxEvents, 50, "/tmp/test-storage.json", 0644, 0755)
+
+	now := time.Now()
+
+	// Add 10 events with different timestamps (newer events have higher index)
+	// Use past timestamps to pass validation
+	for i := 0; i < 10; i++ {
+		event := &models.Event{
+			ID:             fmt.Sprintf("event-%d", i),
+			EventID:        fmt.Sprintf("event-%d", i),
+			Title:          fmt.Sprintf("Test Event %d", i),
+			Category:       "politics",
+			YesProbability: 0.50,
+			NoProbability:  0.50,
+			Active:         true,
+			LastUpdated:    now.Add(-time.Duration(10-i) * time.Second), // oldest=event-0, newest=event-9
+			CreatedAt:      now.Add(-1 * time.Hour),
+		}
+		if err := s.AddEvent(event); err != nil {
+			t.Fatalf("AddEvent failed for event-%d: %v", i, err)
+		}
+	}
+
+	// Verify all 10 added
+	events, _ := s.GetAllEvents()
+	if len(events) != 10 {
+		t.Fatalf("Expected 10 events before rotation, got %d", len(events))
+	}
+
+	// Rotate
+	if err := s.RotateEvents(); err != nil {
+		t.Errorf("RotateEvents failed: %v", err)
+	}
+
+	// Should have only maxEvents (5) remaining - the newest ones
+	events, err := s.GetAllEvents()
+	if err != nil {
+		t.Fatalf("GetAllEvents after rotation failed: %v", err)
+	}
+	if len(events) != maxEvents {
+		t.Errorf("Expected %d events after rotation, got %d", maxEvents, len(events))
+	}
+
+	// Verify oldest events (0-4) were removed, newest (5-9) remain
+	for _, event := range events {
+		var idx int
+		if _, err := fmt.Sscanf(event.ID, "event-%d", &idx); err != nil {
+			t.Errorf("Failed to parse event ID %s: %v", event.ID, err)
+			continue
+		}
+		if idx < 5 {
+			t.Errorf("Old event %s should have been rotated out", event.ID)
+		}
+	}
+}
+
+func TestStorage_MigrateToCompositeIDs(t *testing.T) {
+	tempFile := "/tmp/test-poly-oracle-migrate.json"
+	defer func() { _ = os.Remove(tempFile) }()
+
+	// Create v1.0 format data file with old single-market ID format
+	now := time.Now()
+	v1Data := PersistenceFile{
+		Version: "1.0",
+		SavedAt: now,
+		Events: map[string]*models.Event{
+			"event-123": { // Old format: just event ID
+				ID:             "event-123",
+				EventID:        "event-123",
+				MarketID:       "market-456",
+				Title:          "Test Event",
+				Category:       "politics",
+				YesProbability: 0.75,
+				NoProbability:  0.25,
+				Active:         true,
+				LastUpdated:    now,
+				CreatedAt:      now.Add(-1 * time.Hour),
+			},
+		},
+		Snapshots: map[string][]models.Snapshot{
+			"event-123": { // Old format: just event ID
+				{
+					ID:             "snap-1",
+					EventID:        "event-123",
+					YesProbability: 0.70,
+					NoProbability:  0.30,
+					Timestamp:      now.Add(-30 * time.Minute),
+					Source:         "test",
+				},
+				{
+					ID:             "snap-2",
+					EventID:        "event-123",
+					YesProbability: 0.75,
+					NoProbability:  0.25,
+					Timestamp:      now,
+					Source:         "test",
+				},
+			},
+		},
+	}
+
+	// Write v1.0 data to file
+	jsonData, err := json.Marshal(v1Data)
+	if err != nil {
+		t.Fatalf("Failed to marshal v1 data: %v", err)
+	}
+	if err := os.WriteFile(tempFile, jsonData, 0644); err != nil {
+		t.Fatalf("Failed to write v1 data file: %v", err)
+	}
+
+	// Create new storage and load (should trigger migration)
+	s := New(100, 50, tempFile, 0644, 0755)
+	if err := s.Load(); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	// Verify event was migrated to composite ID format
+	compositeID := "event-123:market-456"
+
+	// Old ID should not exist
+	if _, err := s.GetEvent("event-123"); err == nil {
+		t.Error("Old ID format 'event-123' should not exist after migration")
+	}
+
+	// New composite ID should exist
+	migratedEvent, err := s.GetEvent(compositeID)
+	if err != nil {
+		t.Fatalf("Failed to get migrated event with composite ID: %v", err)
+	}
+
+	// Verify event data is preserved
+	if migratedEvent.ID != compositeID {
+		t.Errorf("Expected migrated ID '%s', got '%s'", compositeID, migratedEvent.ID)
+	}
+	if migratedEvent.EventID != "event-123" {
+		t.Errorf("Expected EventID 'event-123', got '%s'", migratedEvent.EventID)
+	}
+	if migratedEvent.MarketID != "market-456" {
+		t.Errorf("Expected MarketID 'market-456', got '%s'", migratedEvent.MarketID)
+	}
+	if migratedEvent.Title != "Test Event" {
+		t.Errorf("Expected title 'Test Event', got '%s'", migratedEvent.Title)
+	}
+
+	// Verify snapshots were migrated
+	snapshots, err := s.GetSnapshots(compositeID)
+	if err != nil {
+		t.Fatalf("Failed to get migrated snapshots: %v", err)
+	}
+	if len(snapshots) != 2 {
+		t.Errorf("Expected 2 migrated snapshots, got %d", len(snapshots))
+	}
+
+	// Verify snapshot event IDs were updated
+	for _, snap := range snapshots {
+		if snap.EventID != compositeID {
+			t.Errorf("Expected snapshot EventID '%s', got '%s'", compositeID, snap.EventID)
+		}
+	}
+
+	// Save and verify it uses v2.0 format
+	if err := s.Save(); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	// Read back and check version
+	savedData, err := os.ReadFile(tempFile)
+	if err != nil {
+		t.Fatalf("Failed to read saved file: %v", err)
+	}
+	var v2Data PersistenceFile
+	if err := json.Unmarshal(savedData, &v2Data); err != nil {
+		t.Fatalf("Failed to unmarshal saved data: %v", err)
+	}
+	if v2Data.Version != "2.0" {
+		t.Errorf("Expected version '2.0' after save, got '%s'", v2Data.Version)
 	}
 }

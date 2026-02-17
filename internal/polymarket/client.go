@@ -19,10 +19,12 @@ import (
 
 // Client provides access to Polymarket API
 type Client struct {
-	gammaAPIURL string
-	clobAPIURL  string
-	httpClient  *http.Client
-	timeout     time.Duration
+	gammaAPIURL    string
+	clobAPIURL     string
+	httpClient     *http.Client
+	timeout        time.Duration
+	maxRetries     int
+	retryDelayBase time.Duration
 }
 
 // PolymarketEvent represents an event from Polymarket Gamma API
@@ -63,15 +65,56 @@ type PolymarketMarket struct {
 	ClobTokenIds  string `json:"clobTokenIds"`  // JSON string: "[\"token1\", \"token2\"]"
 }
 
+// ClientConfig holds optional configuration for the Polymarket client
+type ClientConfig struct {
+	MaxRetries          int
+	RetryDelayBase      time.Duration
+	MaxIdleConns        int
+	MaxIdleConnsPerHost int
+	IdleConnTimeout     time.Duration
+}
+
 // NewClient creates a new Polymarket client
-func NewClient(gammaAPIURL, clobAPIURL string, timeout time.Duration) *Client {
+func NewClient(gammaAPIURL, clobAPIURL string, timeout time.Duration, cfg ...ClientConfig) *Client {
+	var maxRetries = 3
+	var retryDelayBase = time.Second
+	var maxIdleConns = 100
+	var maxIdleConnsPerHost = 10
+	var idleConnTimeout = 90 * time.Second
+
+	if len(cfg) > 0 {
+		if cfg[0].MaxRetries > 0 {
+			maxRetries = cfg[0].MaxRetries
+		}
+		if cfg[0].RetryDelayBase > 0 {
+			retryDelayBase = cfg[0].RetryDelayBase
+		}
+		if cfg[0].MaxIdleConns > 0 {
+			maxIdleConns = cfg[0].MaxIdleConns
+		}
+		if cfg[0].MaxIdleConnsPerHost > 0 {
+			maxIdleConnsPerHost = cfg[0].MaxIdleConnsPerHost
+		}
+		if cfg[0].IdleConnTimeout > 0 {
+			idleConnTimeout = cfg[0].IdleConnTimeout
+		}
+	}
+
 	return &Client{
 		gammaAPIURL: gammaAPIURL,
 		clobAPIURL:  clobAPIURL,
 		httpClient: &http.Client{
 			Timeout: timeout,
+			Transport: &http.Transport{
+				MaxIdleConns:        maxIdleConns,
+				MaxIdleConnsPerHost: maxIdleConnsPerHost,
+				IdleConnTimeout:     idleConnTimeout,
+				TLSHandshakeTimeout: 10 * time.Second,
+			},
 		},
-		timeout: timeout,
+		timeout:        timeout,
+		maxRetries:     maxRetries,
+		retryDelayBase: retryDelayBase,
 	}
 }
 
@@ -99,7 +142,7 @@ func (c *Client) FetchEvents(ctx context.Context, categories []string, vol24hrMi
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch events from %s: %w", u.String(), err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Validate content type
 	contentType := resp.Header.Get("Content-Type")
@@ -191,12 +234,9 @@ func (c *Client) FetchEvents(ctx context.Context, categories []string, vol24hrMi
 			// Capture current time once to ensure CreatedAt <= LastUpdated
 			now := time.Now()
 
-			// Create composite ID for multi-market tracking
-			// If only one market, use event ID directly; otherwise use "EventID:MarketID"
-			compositeID := pe.ID
-			if len(pe.Markets) > 1 {
-				compositeID = pe.ID + ":" + market.ID
-			}
+			// Always use composite ID format for consistency
+			// This prevents data loss when events transition from single to multi-market
+			compositeID := pe.ID + ":" + market.ID
 
 			event := models.Event{
 				ID:             compositeID,
@@ -253,7 +293,9 @@ func parseMarketProbabilities(market PolymarketMarket) (float64, float64, error)
 		}
 
 		var price float64
-		fmt.Sscanf(outcomePrices[i], "%f", &price)
+		if _, err := fmt.Sscanf(outcomePrices[i], "%f", &price); err != nil {
+			return 0, 0, fmt.Errorf("failed to parse price '%s': %w", outcomePrices[i], err)
+		}
 
 		switch outcome {
 		case "Yes":
@@ -268,16 +310,20 @@ func parseMarketProbabilities(market PolymarketMarket) (float64, float64, error)
 
 // containsJSON checks if a content-type string contains json
 func containsJSON(contentType string) bool {
-	return len(contentType) >= 16 && contentType[:16] == "application/json" ||
-		len(contentType) > 16 && contentType[:17] == "application/json;"
+	if len(contentType) == 16 && contentType == "application/json" {
+		return true
+	}
+	if len(contentType) >= 17 && contentType[:17] == "application/json;" {
+		return true
+	}
+	return false
 }
 
 // doRequest performs HTTP request with retry logic
 func (c *Client) doRequest(ctx context.Context, urlStr string) (*http.Response, error) {
-	maxRetries := 3
 	var lastErr error
 
-	for i := 0; i < maxRetries; i++ {
+	for i := 0; i < c.maxRetries; i++ {
 		// Check if context is cancelled before making request
 		select {
 		case <-ctx.Done():
@@ -299,30 +345,30 @@ func (c *Client) doRequest(ctx context.Context, urlStr string) (*http.Response, 
 			select {
 			case <-ctx.Done():
 				return nil, fmt.Errorf("request cancelled during retry: %w", ctx.Err())
-			case <-time.After(time.Duration(i+1) * time.Second):
+			case <-time.After(c.retryDelayBase * time.Duration(i+1)):
 				continue
 			}
 		}
 
 		// Handle various HTTP status codes
 		if resp.StatusCode >= 500 {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			lastErr = fmt.Errorf("server error (status %d): %s", resp.StatusCode, resp.Status)
 			select {
 			case <-ctx.Done():
 				return nil, fmt.Errorf("request cancelled during retry: %w", ctx.Err())
-			case <-time.After(time.Duration(i+1) * time.Second):
+			case <-time.After(c.retryDelayBase * time.Duration(i+1)):
 				continue
 			}
 		}
 
 		if resp.StatusCode >= 400 {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			return nil, fmt.Errorf("client error (status %d): %s", resp.StatusCode, resp.Status)
 		}
 
 		return resp, nil
 	}
 
-	return nil, fmt.Errorf("max retries (%d) exceeded: %w", maxRetries, lastErr)
+	return nil, fmt.Errorf("max retries (%d) exceeded: %w", c.maxRetries, lastErr)
 }

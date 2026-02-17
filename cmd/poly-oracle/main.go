@@ -46,6 +46,8 @@ func main() {
 		cfg.Storage.MaxEvents,
 		cfg.Storage.MaxSnapshotsPerEvent,
 		cfg.Storage.FilePath,
+		os.FileMode(cfg.Storage.FilePermissions),
+		os.FileMode(cfg.Storage.DirPermissions),
 	)
 
 	// Load persisted data
@@ -60,6 +62,13 @@ func main() {
 		cfg.Polymarket.GammaAPIURL,
 		cfg.Polymarket.CLOBAPIURL,
 		cfg.Polymarket.Timeout,
+		polymarket.ClientConfig{
+			MaxRetries:          cfg.Polymarket.MaxRetries,
+			RetryDelayBase:      cfg.Polymarket.RetryDelayBase,
+			MaxIdleConns:        cfg.Polymarket.MaxIdleConns,
+			MaxIdleConnsPerHost: cfg.Polymarket.MaxIdleConnsPerHost,
+			IdleConnTimeout:     cfg.Polymarket.IdleConnTimeout,
+		},
 	)
 
 	// Initialize monitor
@@ -68,7 +77,7 @@ func main() {
 	// Initialize Telegram client
 	var telegramClient *telegram.Client
 	if cfg.Telegram.Enabled {
-		telegramClient, err = telegram.NewClient(cfg.Telegram.BotToken, cfg.Telegram.ChatID)
+		telegramClient, err = telegram.NewClient(cfg.Telegram.BotToken, cfg.Telegram.ChatID, cfg.Telegram.MaxRetries, cfg.Telegram.RetryDelayBase)
 		if err != nil {
 			logger.Fatal("Failed to initialize Telegram client: %v", err)
 		}
@@ -134,10 +143,26 @@ func main() {
 			}
 
 		case <-persistenceTicker.C:
-			if err := store.Save(); err != nil {
-				logger.Error("Failed to persist data: %v", err)
-			} else {
-				logger.Debug("Data persisted to disk successfully")
+			// Retry persistence with exponential backoff
+			var saveErr error
+			for attempt := 0; attempt <= cfg.Storage.PersistenceRetries; attempt++ {
+				if err := store.Save(); err == nil {
+					logger.Debug("Data persisted successfully")
+					saveErr = nil
+					break
+				} else {
+					saveErr = err
+					if attempt < cfg.Storage.PersistenceRetries {
+						delay := cfg.Storage.PersistenceRetryDelay * time.Duration(attempt+1)
+						logger.Warn("Persistence attempt %d/%d failed: %v (retrying in %v)",
+							attempt+1, cfg.Storage.PersistenceRetries+1, err, delay)
+						time.Sleep(delay)
+					}
+				}
+			}
+			if saveErr != nil {
+				logger.Error("Failed to persist after %d attempts: %v",
+					cfg.Storage.PersistenceRetries+1, saveErr)
 			}
 
 			// Rotate old data
@@ -227,9 +252,12 @@ func runMonitoringCycle(
 	}
 	logger.Debug("Detecting changes across %d total events with threshold %.2f", len(allEvents), cfg.Monitor.Threshold)
 
-	changes, err := mon.DetectChanges(convertEvents(allEvents), cfg.Monitor.Threshold, cfg.Monitor.Window)
+	changes, detectionErrors, err := mon.DetectChanges(convertEvents(allEvents), cfg.Monitor.Threshold, cfg.Monitor.Window)
 	if err != nil {
 		return fmt.Errorf("failed to detect changes: %w", err)
+	}
+	for _, detErr := range detectionErrors {
+		logger.Warn("Failed to detect changes for event %s: %v", detErr.EventID, detErr.Err)
 	}
 
 	// Clear old changes and store new ones

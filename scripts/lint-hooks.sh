@@ -22,8 +22,8 @@ if [[ "$file_path" == *.go ]] && [ -f "$file_path" ]; then
         echo "✅ $file_path passed checks."
         exit 0
     else
-        echo "❌ Linter issues in $file_path:"
-        echo "$lint_output"
+        echo "❌ Linter issues in $file_path:" >&2
+        echo "$lint_output" >&2
         # Exit 2 sends the stderr back to Claude as a "block" signal
         # This forces the agent to read the errors and fix them.
         exit 2

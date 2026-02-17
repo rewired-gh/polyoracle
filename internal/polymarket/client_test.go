@@ -280,8 +280,8 @@ func TestFetchEvents_VolumeFilterAND(t *testing.T) {
 	if len(events) != 1 {
 		t.Errorf("Expected 1 event (AND logic), got %d", len(events))
 	}
-	if len(events) > 0 && events[0].ID != "event-1" {
-		t.Errorf("Expected event-1, got %s", events[0].ID)
+	if len(events) > 0 && events[0].EventID != "event-1" {
+		t.Errorf("Expected EventID event-1, got %s", events[0].EventID)
 	}
 }
 
@@ -415,6 +415,22 @@ func TestParseMarketProbabilities(t *testing.T) {
 			},
 			expectError: true,
 		},
+		{
+			name: "Invalid price string",
+			market: PolymarketMarket{
+				Outcomes:      "[\"Yes\", \"No\"]",
+				OutcomePrices: "[\"invalid\", \"0.25\"]",
+			},
+			expectError: true,
+		},
+		{
+			name: "Empty price string",
+			market: PolymarketMarket{
+				Outcomes:      "[\"Yes\", \"No\"]",
+				OutcomePrices: "[\"\", \"0.25\"]",
+			},
+			expectError: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -434,6 +450,33 @@ func TestParseMarketProbabilities(t *testing.T) {
 				if no != tt.expectedNo {
 					t.Errorf("Expected no=%f, got %f", tt.expectedNo, no)
 				}
+			}
+		})
+	}
+}
+
+func TestContainsJSON(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected bool
+	}{
+		{"application/json", true},
+		{"application/json;", true},
+		{"application/json; charset=utf-8", true},
+		{"text/html", false},
+		{"", false},
+		{"application/js", false},
+		{"application/jsonx", false},
+		{"application/jso", false},       // Too short
+		{"text/application/json", false}, // Doesn't start with application/json
+		{"APPLICATION/JSON", false},      // Case sensitive
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := containsJSON(tt.input)
+			if result != tt.expected {
+				t.Errorf("containsJSON(%q) = %v, want %v", tt.input, result, tt.expected)
 			}
 		})
 	}

@@ -17,12 +17,14 @@ import (
 
 // Client handles Telegram notifications
 type Client struct {
-	bot    *tgbotapi.BotAPI
-	chatID int64
+	bot            *tgbotapi.BotAPI
+	chatID         int64
+	maxRetries     int
+	retryDelayBase time.Duration
 }
 
 // NewClient creates a new Telegram client
-func NewClient(botToken, chatID string) (*Client, error) {
+func NewClient(botToken, chatID string, maxRetries int, retryDelayBase time.Duration) (*Client, error) {
 	bot, err := tgbotapi.NewBotAPI(botToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Telegram bot: %w", err)
@@ -33,9 +35,18 @@ func NewClient(botToken, chatID string) (*Client, error) {
 		return nil, fmt.Errorf("invalid chat ID: %w", err)
 	}
 
+	if maxRetries <= 0 {
+		maxRetries = 3
+	}
+	if retryDelayBase <= 0 {
+		retryDelayBase = time.Second
+	}
+
 	return &Client{
-		bot:    bot,
-		chatID: chatIDInt,
+		bot:            bot,
+		chatID:         chatIDInt,
+		maxRetries:     maxRetries,
+		retryDelayBase: retryDelayBase,
 	}, nil
 }
 
@@ -48,19 +59,18 @@ func (c *Client) Send(changes []models.Change) error {
 	msg.ParseMode = "MarkdownV2" // Use MarkdownV2 for better escaping support
 
 	// Send with retry
-	maxRetries := 3
 	var lastErr error
 
-	for i := 0; i < maxRetries; i++ {
+	for i := 0; i < c.maxRetries; i++ {
 		_, err := c.bot.Send(msg)
 		if err == nil {
 			return nil
 		}
 		lastErr = err
-		time.Sleep(time.Duration(i+1) * time.Second)
+		time.Sleep(c.retryDelayBase * time.Duration(i+1))
 	}
 
-	return fmt.Errorf("failed to send message after %d retries: %w", maxRetries, lastErr)
+	return fmt.Errorf("failed to send message after %d retries: %w", c.maxRetries, lastErr)
 }
 
 // formatMessage formats changes into a Telegram message

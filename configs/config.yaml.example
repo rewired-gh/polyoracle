@@ -32,6 +32,11 @@ polymarket:
   volume_filter_or: true        # true = OR (union), false = AND (intersection)
   limit: 200                    # Fetch enough events to find quality signals
   timeout: 30s                  # API request timeout
+  max_retries: 3                # Number of retry attempts on API failure
+  retry_delay_base: 1s          # Base delay between retries (multiplied by attempt number)
+  max_idle_conns: 100           # Maximum idle HTTP connections in pool
+  max_idle_conns_per_host: 10   # Maximum idle connections per host
+  idle_conn_timeout: 90s        # Timeout for idle connections
 
 # Monitoring behavior configuration
 monitor:
@@ -45,6 +50,8 @@ telegram:
   bot_token: "YOUR_BOT_TOKEN_HERE"  # Get from @BotFather on Telegram
   chat_id: "YOUR_CHAT_ID_HERE"      # Get from @userinfobot on Telegram
   enabled: true                     # Enable Telegram notifications
+  max_retries: 3                    # Number of retry attempts for sending messages
+  retry_delay_base: 1s              # Base delay between retries
 
 # Storage and persistence configuration
 storage:
@@ -52,6 +59,10 @@ storage:
   max_snapshots_per_event: 24               # 24 hours of hourly snapshots
   max_file_size_mb: 100                     # Maximum persistence file size in MB
   persistence_interval: 1h                  # Save to disk every hour (matches poll interval)
+  persistence_retries: 3                    # Retry attempts for Save() failures
+  persistence_retry_delay: 5s              # Base delay between persistence retries
+  file_permissions: 0600                    # Owner-only file permissions (recommended for security)
+  dir_permissions: 0700                     # Owner-only directory permissions (recommended for security)
   file_path: ""                             # Empty = use OS tmp dir (/tmp/poly-oracle/data.json on macOS/Linux)
   data_dir: ""                              # Empty = use OS tmp dir
 

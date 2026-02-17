@@ -25,16 +25,21 @@ type Config struct {
 
 // PolymarketConfig holds Polymarket API configuration
 type PolymarketConfig struct {
-	GammaAPIURL    string        `mapstructure:"gamma_api_url"`
-	CLOBAPIURL     string        `mapstructure:"clob_api_url"`
-	PollInterval   time.Duration `mapstructure:"poll_interval"`
-	Categories     []string      `mapstructure:"categories"`
-	Volume24hrMin  float64       `mapstructure:"volume_24hr_min"`
-	Volume1wkMin   float64       `mapstructure:"volume_1wk_min"`
-	Volume1moMin   float64       `mapstructure:"volume_1mo_min"`
-	VolumeFilterOR bool          `mapstructure:"volume_filter_or"` // true = OR (union), false = AND (intersection)
-	Limit          int           `mapstructure:"limit"`
-	Timeout        time.Duration `mapstructure:"timeout"`
+	GammaAPIURL         string        `mapstructure:"gamma_api_url"`
+	CLOBAPIURL          string        `mapstructure:"clob_api_url"`
+	PollInterval        time.Duration `mapstructure:"poll_interval"`
+	Categories          []string      `mapstructure:"categories"`
+	Volume24hrMin       float64       `mapstructure:"volume_24hr_min"`
+	Volume1wkMin        float64       `mapstructure:"volume_1wk_min"`
+	Volume1moMin        float64       `mapstructure:"volume_1mo_min"`
+	VolumeFilterOR      bool          `mapstructure:"volume_filter_or"` // true = OR (union), false = AND (intersection)
+	Limit               int           `mapstructure:"limit"`
+	Timeout             time.Duration `mapstructure:"timeout"`
+	MaxRetries          int           `mapstructure:"max_retries"`
+	RetryDelayBase      time.Duration `mapstructure:"retry_delay_base"`
+	MaxIdleConns        int           `mapstructure:"max_idle_conns"`
+	MaxIdleConnsPerHost int           `mapstructure:"max_idle_conns_per_host"`
+	IdleConnTimeout     time.Duration `mapstructure:"idle_conn_timeout"`
 }
 
 // MonitorConfig holds monitoring behavior configuration
@@ -47,19 +52,25 @@ type MonitorConfig struct {
 
 // TelegramConfig holds Telegram notification configuration
 type TelegramConfig struct {
-	BotToken string `mapstructure:"bot_token"`
-	ChatID   string `mapstructure:"chat_id"`
-	Enabled  bool   `mapstructure:"enabled"`
+	BotToken       string        `mapstructure:"bot_token"`
+	ChatID         string        `mapstructure:"chat_id"`
+	Enabled        bool          `mapstructure:"enabled"`
+	MaxRetries     int           `mapstructure:"max_retries"`
+	RetryDelayBase time.Duration `mapstructure:"retry_delay_base"`
 }
 
 // StorageConfig holds storage and persistence configuration
 type StorageConfig struct {
-	MaxEvents            int           `mapstructure:"max_events"`
-	MaxSnapshotsPerEvent int           `mapstructure:"max_snapshots_per_event"`
-	MaxFileSizeMB        int           `mapstructure:"max_file_size_mb"`
-	PersistenceInterval  time.Duration `mapstructure:"persistence_interval"`
-	FilePath             string        `mapstructure:"file_path"`
-	DataDir              string        `mapstructure:"data_dir"`
+	MaxEvents             int           `mapstructure:"max_events"`
+	MaxSnapshotsPerEvent  int           `mapstructure:"max_snapshots_per_event"`
+	MaxFileSizeMB         int           `mapstructure:"max_file_size_mb"`
+	PersistenceInterval   time.Duration `mapstructure:"persistence_interval"`
+	PersistenceRetries    int           `mapstructure:"persistence_retries"`
+	PersistenceRetryDelay time.Duration `mapstructure:"persistence_retry_delay"`
+	FilePermissions       uint32        `mapstructure:"file_permissions"`
+	DirPermissions        uint32        `mapstructure:"dir_permissions"`
+	FilePath              string        `mapstructure:"file_path"`
+	DataDir               string        `mapstructure:"data_dir"`
 }
 
 // LoggingConfig holds logging configuration
@@ -94,6 +105,11 @@ func Load(path string) (*Config, error) {
 	_ = v.BindEnv("polymarket.volume_filter_or", "POLY_ORACLE_POLYMARKET_VOLUME_FILTER_OR")
 	_ = v.BindEnv("polymarket.limit", "POLY_ORACLE_POLYMARKET_LIMIT")
 	_ = v.BindEnv("polymarket.timeout", "POLY_ORACLE_POLYMARKET_TIMEOUT")
+	_ = v.BindEnv("polymarket.max_retries", "POLY_ORACLE_POLYMARKET_MAX_RETRIES")
+	_ = v.BindEnv("polymarket.retry_delay_base", "POLY_ORACLE_POLYMARKET_RETRY_DELAY_BASE")
+	_ = v.BindEnv("polymarket.max_idle_conns", "POLY_ORACLE_POLYMARKET_MAX_IDLE_CONNS")
+	_ = v.BindEnv("polymarket.max_idle_conns_per_host", "POLY_ORACLE_POLYMARKET_MAX_IDLE_CONNS_PER_HOST")
+	_ = v.BindEnv("polymarket.idle_conn_timeout", "POLY_ORACLE_POLYMARKET_IDLE_CONN_TIMEOUT")
 
 	// Monitor
 	_ = v.BindEnv("monitor.threshold", "POLY_ORACLE_MONITOR_THRESHOLD")
@@ -105,12 +121,18 @@ func Load(path string) (*Config, error) {
 	_ = v.BindEnv("telegram.bot_token", "POLY_ORACLE_TELEGRAM_BOT_TOKEN")
 	_ = v.BindEnv("telegram.chat_id", "POLY_ORACLE_TELEGRAM_CHAT_ID")
 	_ = v.BindEnv("telegram.enabled", "POLY_ORACLE_TELEGRAM_ENABLED")
+	_ = v.BindEnv("telegram.max_retries", "POLY_ORACLE_TELEGRAM_MAX_RETRIES")
+	_ = v.BindEnv("telegram.retry_delay_base", "POLY_ORACLE_TELEGRAM_RETRY_DELAY_BASE")
 
 	// Storage
 	_ = v.BindEnv("storage.max_events", "POLY_ORACLE_STORAGE_MAX_EVENTS")
 	_ = v.BindEnv("storage.max_snapshots_per_event", "POLY_ORACLE_STORAGE_MAX_SNAPSHOTS_PER_EVENT")
 	_ = v.BindEnv("storage.max_file_size_mb", "POLY_ORACLE_STORAGE_MAX_FILE_SIZE_MB")
 	_ = v.BindEnv("storage.persistence_interval", "POLY_ORACLE_STORAGE_PERSISTENCE_INTERVAL")
+	_ = v.BindEnv("storage.persistence_retries", "POLY_ORACLE_STORAGE_PERSISTENCE_RETRIES")
+	_ = v.BindEnv("storage.persistence_retry_delay", "POLY_ORACLE_STORAGE_PERSISTENCE_RETRY_DELAY")
+	_ = v.BindEnv("storage.file_permissions", "POLY_ORACLE_STORAGE_FILE_PERMISSIONS")
+	_ = v.BindEnv("storage.dir_permissions", "POLY_ORACLE_STORAGE_DIR_PERMISSIONS")
 	_ = v.BindEnv("storage.file_path", "POLY_ORACLE_STORAGE_FILE_PATH")
 	_ = v.BindEnv("storage.data_dir", "POLY_ORACLE_STORAGE_DATA_DIR")
 
@@ -147,6 +169,11 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("polymarket.volume_filter_or", true)   // true = OR (union)
 	v.SetDefault("polymarket.limit", 200)
 	v.SetDefault("polymarket.timeout", "30s")
+	v.SetDefault("polymarket.max_retries", 3)
+	v.SetDefault("polymarket.retry_delay_base", "1s")
+	v.SetDefault("polymarket.max_idle_conns", 100)
+	v.SetDefault("polymarket.max_idle_conns_per_host", 10)
+	v.SetDefault("polymarket.idle_conn_timeout", "90s")
 
 	// Monitor defaults
 	v.SetDefault("monitor.threshold", 0.04) // 4% change (meaningful movements)
@@ -154,13 +181,22 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("monitor.top_k", 5) // Top 5 events (digestible)
 	v.SetDefault("monitor.enabled", true)
 
+	// Telegram defaults
+	v.SetDefault("telegram.enabled", false)
+	v.SetDefault("telegram.max_retries", 3)
+	v.SetDefault("telegram.retry_delay_base", "1s")
+
 	// Storage defaults
 	v.SetDefault("storage.max_events", 1000)
 	v.SetDefault("storage.max_snapshots_per_event", 24) // 24 hourly snapshots
 	v.SetDefault("storage.max_file_size_mb", 100)
-	v.SetDefault("storage.persistence_interval", "1h") // Matches poll interval
-	v.SetDefault("storage.file_path", "")              // Empty = OS tmp directory
-	v.SetDefault("storage.data_dir", "")               // Empty = OS tmp directory
+	v.SetDefault("storage.persistence_interval", "1h")    // Matches poll interval
+	v.SetDefault("storage.persistence_retries", 3)        // Retry 3 times on failure
+	v.SetDefault("storage.persistence_retry_delay", "5s") // 5 second base delay between retries
+	v.SetDefault("storage.file_permissions", 0600)        // Owner-only read/write for data files
+	v.SetDefault("storage.dir_permissions", 0700)         // Owner-only for data directory
+	v.SetDefault("storage.file_path", "")                 // Empty = OS tmp directory
+	v.SetDefault("storage.data_dir", "")                  // Empty = OS tmp directory
 
 	// Logging defaults
 	v.SetDefault("logging.level", "info")

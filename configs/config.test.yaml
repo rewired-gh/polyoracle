@@ -11,14 +11,14 @@
 polymarket:
   gamma_api_url: "https://gamma-api.polymarket.com"
   clob_api_url: "https://clob.polymarket.com"
-  poll_interval: 5m                                  # Poll every 5 minutes (matches production)
+  poll_interval: 15m                                 # Poll every 15 minutes (matches production)
   categories:                                        # Test with all relevant categories
     - geopolitics
     - tech
     - finance
     - world
   # Low volume thresholds for testing - captures more events
-  volume_24hr_min: 1000.0       # $1K minimum (captures ~80-100 events)
+  volume_24hr_min: 1000.0       # $1K minimum
   volume_1wk_min: 5000.0        # $5K weekly
   volume_1mo_min: 10000.0       # $10K monthly
   volume_filter_or: true        # OR logic (union)
@@ -27,8 +27,8 @@ polymarket:
 
 # Monitoring behavior configuration - very sensitive for testing
 monitor:
-  threshold: 0.01        # 1% change (very sensitive)
-  window: 5m             # 5-minute window (matches poll interval)
+  threshold: 0.04        # 2% change (very sensitive)
+  window: 15m            # 15-minute window (matches poll interval)
   top_k: 5               # Show top 5 events for testing
   enabled: true
 
@@ -43,7 +43,7 @@ storage:
   max_events: 1000000                       # Maximum events to track in memory
   max_snapshots_per_event: 288              # 24 hours of 5-minute snapshots (288 = 24*12)
   max_file_size_mb: 500                     # Maximum persistence file size in MB
-  persistence_interval: 5m                  # Save frequently for testing
+  persistence_interval: 15m                 # Save frequently for testing
   file_path: ""                             # Empty = use OS tmp dir
   data_dir: ""                              # Empty = use OS tmp dir
 
