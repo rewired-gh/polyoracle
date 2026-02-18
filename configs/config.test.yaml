@@ -23,10 +23,18 @@ monitor:
   #   0.3 → minScore=0.0045  — very permissive; expect 5+ alerts per cycle
   #   0.4 → minScore=0.008   — catches 5%+ moves on mid-volume markets; ~2-4 alerts/cycle (recommended)
   #   0.5 → minScore=0.0125  — stricter; only strong moves on high-volume markets pass
+  #   0.7 → minScore=0.0245  — filters tail-probability noise (KL amplifies <5% base prob moves)
   #
-  # Example: a 7% drop on a $500K market with stable history scores ≈ 0.22 (passes at 0.4)
-  # Example: a 0.4%→0.8% tail move on a $10K market scores ≈ 0.0008 (filtered at 0.4)
-  sensitivity: 0.5
+  # Note: early in a run (< detection_intervals cycles), SNR/TC both fall back to 1.0
+  # because there are too few snapshots for Bessel-corrected std dev. During bootstrap,
+  # score = KL × VolumeWeight only — KL is disproportionately large for low-probability
+  # markets (e.g. 0.9%→0.5% scores similar to 40%→30%), so high-volume geopolitics
+  # markets with tiny tail moves can slip through at sensitivity ≤ 0.5.
+  # Use 0.7 to suppress this bootstrap noise.
+  #
+  # Example: a 7% drop on a $500K market with stable history scores ≈ 0.22 (passes at 0.7)
+  # Example: a 1.1% drop on a $1M geopolitics market scores ≈ 0.016 (filtered at 0.7)
+  sensitivity: 0.7
   top_k: 10
 
   # detection_intervals: number of poll_interval periods in the detection window.
@@ -42,7 +50,7 @@ telegram:
 storage:
   # Tuned for 4 GiB RAM / 128 GiB SSD
   max_events: 10000                       # Track up to 10000 events
-  max_snapshots_per_event: 672            # 7 days of 15-min data for SNR
+  max_snapshots_per_event: 288            # 1 days of 5-min data for SNR
   max_file_size_mb: 2048                  # Up to 2 GB persistence file
 
 logging:

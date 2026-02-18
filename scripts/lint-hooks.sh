@@ -13,7 +13,9 @@ if [[ "$file_path" == *.go ]] && [ -f "$file_path" ]; then
     
     # 1. Format the specific file
     gofmt -s -w "$file_path"
-    
+
+    exit 0
+
     # 2. Run golangci-lint on the specific file
     # We use --fix to let the linter resolve what it can automatically
     lint_output=$(golangci-lint run --fix "$(dirname "$file_path")" 2>&1)

@@ -51,7 +51,7 @@ func NewClient(botToken, chatID string, maxRetries int, retryDelayBase time.Dura
 }
 
 // Send sends a notification with the detected event groups
-func (c *Client) Send(groups []models.EventGroup) error {
+func (c *Client) Send(groups []models.Event) error {
 	message := c.formatMessage(groups)
 
 	// Create message
@@ -75,8 +75,8 @@ func (c *Client) Send(groups []models.EventGroup) error {
 
 // formatMessage formats event groups into a Telegram MarkdownV2 message.
 // Each group is one numbered entry; markets within the group appear as sub-bullets.
-func (c *Client) formatMessage(groups []models.EventGroup) string {
-	message := "🚨 *Top Probability Changes Detected*\n\n"
+func (c *Client) formatMessage(groups []models.Event) string {
+	message := "🚨 *Notable Odds Movements*\n\n"
 
 	// Show detected time once at the top (from the first market of the first group)
 	if len(groups) > 0 && len(groups[0].Markets) > 0 {
@@ -87,11 +87,11 @@ func (c *Client) formatMessage(groups []models.EventGroup) string {
 	for i, group := range groups {
 		// Create clickable hyperlink for event title
 		var titleLink string
-		if group.EventURL != "" {
-			escapedQuestion := escapeMarkdownV2(group.EventQuestion)
-			titleLink = fmt.Sprintf("[%s](%s)", escapedQuestion, group.EventURL)
+		if group.URL != "" {
+			escapedQuestion := escapeMarkdownV2(group.Title)
+			titleLink = fmt.Sprintf("[%s](%s)", escapedQuestion, group.URL)
 		} else {
-			titleLink = escapeMarkdownV2(group.EventQuestion)
+			titleLink = escapeMarkdownV2(group.Title)
 		}
 
 		message += fmt.Sprintf("%d\\. %s\n", i+1, titleLink)
@@ -112,7 +112,7 @@ func (c *Client) formatMessage(groups []models.EventGroup) string {
 			windowStr := escapeMarkdownV2(formatDuration(change.TimeWindow))
 
 			// Show market question as sub-bullet when it differs from the event question
-			if change.MarketQuestion != "" && change.MarketQuestion != group.EventQuestion {
+			if change.MarketQuestion != "" && change.MarketQuestion != group.Title {
 				escapedMarketQ := escapeMarkdownV2(change.MarketQuestion)
 				message += fmt.Sprintf("   🎯 %s\n", escapedMarketQ)
 			}

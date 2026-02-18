@@ -260,7 +260,7 @@ func runMonitoringCycle(
 	detectionWindow := time.Duration(cfg.Monitor.DetectionIntervals+1) * cfg.Polymarket.PollInterval
 	logger.Debug("Detecting changes across %d total events (window: %v = (%d+1) × %v)",
 		len(allEvents), detectionWindow, cfg.Monitor.DetectionIntervals, cfg.Polymarket.PollInterval)
-	changes, detectionErrors, err := mon.DetectChanges(convertEvents(allEvents), detectionWindow)
+	changes, detectionErrors, err := mon.DetectChanges(convertMarkets(allEvents), detectionWindow)
 	if err != nil {
 		return fmt.Errorf("failed to detect changes: %w", err)
 	}
@@ -285,8 +285,8 @@ func runMonitoringCycle(
 	// SNR normalizes netChange by historical per-interval volatility, so scaling
 	// minScore by window duration is incorrect and creates a near-zero bar at 15m.
 	minScore := cfg.Monitor.MinCompositeScore()
-	eventsMap := buildEventsMap(allEvents)
-	topGroups := mon.ScoreAndRank(changes, eventsMap, minScore, cfg.Monitor.TopK, cfg.Polymarket.Volume24hrMin)
+	marketsMap := buildMarketsMap(allEvents)
+	topGroups := mon.ScoreAndRank(changes, marketsMap, minScore, cfg.Monitor.TopK, cfg.Polymarket.Volume24hrMin)
 
 	// Suppress recently-sent markets (same direction, within cooldown window)
 	topGroups = mon.FilterRecentlySent(topGroups, detectionWindow)
@@ -324,18 +324,18 @@ func generateID() string {
 	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
 
-func convertEvents(events []*models.Event) []models.Event {
-	result := make([]models.Event, len(events))
-	for i, event := range events {
-		result[i] = *event
+func convertMarkets(markets []*models.Market) []models.Market {
+	result := make([]models.Market, len(markets))
+	for i, market := range markets {
+		result[i] = *market
 	}
 	return result
 }
 
-func buildEventsMap(events []*models.Event) map[string]*models.Event {
-	result := make(map[string]*models.Event, len(events))
-	for _, event := range events {
-		result[event.ID] = event
+func buildMarketsMap(markets []*models.Market) map[string]*models.Market {
+	result := make(map[string]*models.Market, len(markets))
+	for _, market := range markets {
+		result[market.ID] = market
 	}
 	return result
 }

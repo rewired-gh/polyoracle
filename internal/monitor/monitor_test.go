@@ -17,9 +17,10 @@ func TestDetectChanges(t *testing.T) {
 	m := New(s)
 
 	now := time.Now()
-	event := models.Event{
-		ID:             "event-1",
+	market := models.Market{
+		ID:             "event-1:market-1",
 		EventID:        "event-1",
+		MarketID:       "market-1",
 		Title:          "Will X happen?",
 		Category:       "politics",
 		YesProbability: 0.75,
@@ -28,14 +29,14 @@ func TestDetectChanges(t *testing.T) {
 		LastUpdated:    now,
 		CreatedAt:      now.Add(-1 * time.Hour),
 	}
-	if err := s.AddEvent(&event); err != nil {
-		t.Fatalf("Failed to add event: %v", err)
+	if err := s.AddMarket(&market); err != nil {
+		t.Fatalf("Failed to add market: %v", err)
 	}
 
 	snapshots := []models.Snapshot{
 		{
 			ID:             uuid.New().String(),
-			EventID:        "event-1",
+			EventID:        "event-1:market-1",
 			YesProbability: 0.60,
 			NoProbability:  0.40,
 			Timestamp:      now.Add(-1 * time.Hour),
@@ -43,7 +44,7 @@ func TestDetectChanges(t *testing.T) {
 		},
 		{
 			ID:             uuid.New().String(),
-			EventID:        "event-1",
+			EventID:        "event-1:market-1",
 			YesProbability: 0.75,
 			NoProbability:  0.25,
 			Timestamp:      now,
@@ -56,8 +57,8 @@ func TestDetectChanges(t *testing.T) {
 		}
 	}
 
-	events := []models.Event{event}
-	changes, _, err := m.DetectChanges(events, 2*time.Hour)
+	markets := []models.Market{market}
+	changes, _, err := m.DetectChanges(markets, 2*time.Hour)
 	if err != nil {
 		t.Fatalf("DetectChanges failed: %v", err)
 	}
@@ -79,9 +80,10 @@ func TestDetectChanges_BelowThreshold(t *testing.T) {
 	m := New(s)
 
 	now := time.Now()
-	event := models.Event{
-		ID:             "event-1",
+	market := models.Market{
+		ID:             "event-1:market-1",
 		EventID:        "event-1",
+		MarketID:       "market-1",
 		Title:          "Test?",
 		Category:       "politics",
 		YesProbability: 0.6001,
@@ -90,15 +92,15 @@ func TestDetectChanges_BelowThreshold(t *testing.T) {
 		LastUpdated:    now,
 		CreatedAt:      now.Add(-1 * time.Hour),
 	}
-	if err := s.AddEvent(&event); err != nil {
-		t.Fatalf("Failed to add event: %v", err)
+	if err := s.AddMarket(&market); err != nil {
+		t.Fatalf("Failed to add market: %v", err)
 	}
 
 	// Very tiny change — below 0.001 floor
 	snapshots := []models.Snapshot{
 		{
 			ID:             uuid.New().String(),
-			EventID:        "event-1",
+			EventID:        "event-1:market-1",
 			YesProbability: 0.6000,
 			NoProbability:  0.4000,
 			Timestamp:      now.Add(-1 * time.Hour),
@@ -106,7 +108,7 @@ func TestDetectChanges_BelowThreshold(t *testing.T) {
 		},
 		{
 			ID:             uuid.New().String(),
-			EventID:        "event-1",
+			EventID:        "event-1:market-1",
 			YesProbability: 0.6001,
 			NoProbability:  0.3999,
 			Timestamp:      now,
@@ -119,8 +121,8 @@ func TestDetectChanges_BelowThreshold(t *testing.T) {
 		}
 	}
 
-	events := []models.Event{event}
-	changes, _, err := m.DetectChanges(events, 2*time.Hour)
+	markets := []models.Market{market}
+	changes, _, err := m.DetectChanges(markets, 2*time.Hour)
 	if err != nil {
 		t.Fatalf("DetectChanges failed: %v", err)
 	}
@@ -134,9 +136,10 @@ func TestDetectChanges_OutOfOrderSnapshots(t *testing.T) {
 	m := New(s)
 
 	now := time.Now()
-	event := models.Event{
-		ID:             "event-1",
+	market := models.Market{
+		ID:             "event-1:market-1",
 		EventID:        "event-1",
+		MarketID:       "market-1",
 		Title:          "Test?",
 		Category:       "politics",
 		YesProbability: 0.85,
@@ -145,15 +148,15 @@ func TestDetectChanges_OutOfOrderSnapshots(t *testing.T) {
 		LastUpdated:    now,
 		CreatedAt:      now.Add(-2 * time.Hour),
 	}
-	if err := s.AddEvent(&event); err != nil {
-		t.Fatalf("Failed to add event: %v", err)
+	if err := s.AddMarket(&market); err != nil {
+		t.Fatalf("Failed to add market: %v", err)
 	}
 
 	// Add snapshots OUT OF ORDER to test sorting
 	snapshots := []models.Snapshot{
 		{
 			ID:             uuid.New().String(),
-			EventID:        "event-1",
+			EventID:        "event-1:market-1",
 			YesProbability: 0.70,
 			NoProbability:  0.30,
 			Timestamp:      now.Add(-1 * time.Hour),
@@ -161,7 +164,7 @@ func TestDetectChanges_OutOfOrderSnapshots(t *testing.T) {
 		},
 		{
 			ID:             uuid.New().String(),
-			EventID:        "event-1",
+			EventID:        "event-1:market-1",
 			YesProbability: 0.50,
 			NoProbability:  0.50,
 			Timestamp:      now.Add(-2 * time.Hour),
@@ -169,7 +172,7 @@ func TestDetectChanges_OutOfOrderSnapshots(t *testing.T) {
 		},
 		{
 			ID:             uuid.New().String(),
-			EventID:        "event-1",
+			EventID:        "event-1:market-1",
 			YesProbability: 0.85,
 			NoProbability:  0.15,
 			Timestamp:      now,
@@ -182,8 +185,8 @@ func TestDetectChanges_OutOfOrderSnapshots(t *testing.T) {
 		}
 	}
 
-	events := []models.Event{event}
-	changes, _, err := m.DetectChanges(events, 3*time.Hour)
+	markets := []models.Market{market}
+	changes, _, err := m.DetectChanges(markets, 3*time.Hour)
 	if err != nil {
 		t.Fatalf("DetectChanges failed: %v", err)
 	}
@@ -474,12 +477,14 @@ func TestScoring(t *testing.T) {
 		}
 	}
 
-	// buildEvent creates an Event with given volume
-	buildEvent := func(id string, vol float64) *models.Event {
-		return &models.Event{
+	// buildMarket creates a Market with given volume for testing
+	buildMarket := func(id string, vol float64) *models.Market {
+		return &models.Market{
 			ID:         id,
 			EventID:    id,
 			Volume24hr: vol,
+			Title:      "Test Market",
+			Category:   "test",
 		}
 	}
 
@@ -562,10 +567,10 @@ func TestScoring(t *testing.T) {
 		store := storage.New(100, 50, "/tmp/test-determinism.json", 0644, 0755)
 		mon := New(store)
 
-		events := map[string]*models.Event{
-			"evt-a": buildEvent("evt-a", 100_000),
-			"evt-b": buildEvent("evt-b", 200_000),
-			"evt-c": buildEvent("evt-c", 50_000),
+		markets := map[string]*models.Market{
+			"evt-a": buildMarket("evt-a", 100_000),
+			"evt-b": buildMarket("evt-b", 200_000),
+			"evt-c": buildMarket("evt-c", 50_000),
 		}
 		changes := []models.Change{
 			buildChange("evt-a", 0.50, 0.60, time.Hour),
@@ -573,17 +578,17 @@ func TestScoring(t *testing.T) {
 			buildChange("evt-c", 0.60, 0.75, time.Hour),
 		}
 
-		result1 := mon.ScoreAndRank(changes, events, 0.0, 10, 25000.0)
-		result2 := mon.ScoreAndRank(changes, events, 0.0, 10, 25000.0)
+		result1 := mon.ScoreAndRank(changes, markets, 0.0, 10, 25000.0)
+		result2 := mon.ScoreAndRank(changes, markets, 0.0, 10, 25000.0)
 
 		if len(result1) != len(result2) {
 			t.Fatalf("Determinism: different lengths %d vs %d", len(result1), len(result2))
 		}
 		for i := range result1 {
-			if result1[i].EventID != result2[i].EventID || result1[i].BestScore != result2[i].BestScore {
+			if result1[i].ID != result2[i].ID || result1[i].BestScore != result2[i].BestScore {
 				t.Errorf("Determinism: position %d differs: %s/%.6f vs %s/%.6f",
-					i, result1[i].EventID, result1[i].BestScore,
-					result2[i].EventID, result2[i].BestScore)
+					i, result1[i].ID, result1[i].BestScore,
+					result2[i].ID, result2[i].BestScore)
 			}
 		}
 	})
@@ -595,10 +600,10 @@ func TestScoreAndRank_TopKLimit(t *testing.T) {
 	store := storage.New(100, 50, "/tmp/test-rank-topk.json", 0644, 0755)
 	mon := New(store)
 
-	events := map[string]*models.Event{
-		"e1": {ID: "e1", Volume24hr: 100_000},
-		"e2": {ID: "e2", Volume24hr: 100_000},
-		"e3": {ID: "e3", Volume24hr: 100_000},
+	markets := map[string]*models.Market{
+		"e1": {ID: "e1", EventID: "e1", Volume24hr: 100_000, Title: "Test 1", Category: "test"},
+		"e2": {ID: "e2", EventID: "e2", Volume24hr: 100_000, Title: "Test 2", Category: "test"},
+		"e3": {ID: "e3", EventID: "e3", Volume24hr: 100_000, Title: "Test 3", Category: "test"},
 	}
 	changes := []models.Change{
 		{ID: "c1", EventID: "e1", OldProbability: 0.50, NewProbability: 0.65, Magnitude: 0.15, Direction: "increase", TimeWindow: time.Hour, DetectedAt: time.Now()},
@@ -606,7 +611,7 @@ func TestScoreAndRank_TopKLimit(t *testing.T) {
 		{ID: "c3", EventID: "e3", OldProbability: 0.50, NewProbability: 0.60, Magnitude: 0.10, Direction: "increase", TimeWindow: time.Hour, DetectedAt: time.Now()},
 	}
 
-	top := mon.ScoreAndRank(changes, events, 0.0, 2, 25000.0)
+	top := mon.ScoreAndRank(changes, markets, 0.0, 2, 25000.0)
 	if len(top) != 2 {
 		t.Errorf("Expected 2 results (k=2), got %d", len(top))
 	}
@@ -616,7 +621,7 @@ func TestScoreAndRank_NeverNil(t *testing.T) {
 	store := storage.New(100, 50, "/tmp/test-rank-nil.json", 0644, 0755)
 	mon := New(store)
 
-	result := mon.ScoreAndRank(nil, map[string]*models.Event{}, 0.0, 5, 25000.0)
+	result := mon.ScoreAndRank(nil, map[string]*models.Market{}, 0.0, 5, 25000.0)
 	if result == nil {
 		t.Error("ScoreAndRank should never return nil, got nil")
 	}
@@ -626,15 +631,15 @@ func TestScoreAndRank_MinScoreFilters(t *testing.T) {
 	store := storage.New(100, 50, "/tmp/test-rank-minscore.json", 0644, 0755)
 	mon := New(store)
 
-	events := map[string]*models.Event{
-		"e1": {ID: "e1", Volume24hr: 100_000},
+	markets := map[string]*models.Market{
+		"e1": {ID: "e1", EventID: "e1", Volume24hr: 100_000, Title: "Test", Category: "test"},
 	}
 	changes := []models.Change{
 		{ID: "c1", EventID: "e1", OldProbability: 0.50, NewProbability: 0.51, Magnitude: 0.01, Direction: "increase", TimeWindow: time.Hour, DetectedAt: time.Now()},
 	}
 
 	// With very high minScore, nothing should pass
-	result := mon.ScoreAndRank(changes, events, 999.0, 5, 25000.0)
+	result := mon.ScoreAndRank(changes, markets, 999.0, 5, 25000.0)
 	if len(result) != 0 {
 		t.Errorf("Expected 0 results with minScore=999, got %d", len(result))
 	}
@@ -644,14 +649,14 @@ func TestScoreAndRank_TopKZero(t *testing.T) {
 	store := storage.New(100, 50, "/tmp/test-rank-k0.json", 0644, 0755)
 	mon := New(store)
 
-	events := map[string]*models.Event{
-		"e1": {ID: "e1", Volume24hr: 100_000},
+	markets := map[string]*models.Market{
+		"e1": {ID: "e1", EventID: "e1", Volume24hr: 100_000, Title: "Test", Category: "test"},
 	}
 	changes := []models.Change{
 		{ID: "c1", EventID: "e1", OldProbability: 0.50, NewProbability: 0.70, Magnitude: 0.20, Direction: "increase", TimeWindow: time.Hour, DetectedAt: time.Now()},
 	}
 
-	result := mon.ScoreAndRank(changes, events, 0.0, 0, 25000.0)
+	result := mon.ScoreAndRank(changes, markets, 0.0, 0, 25000.0)
 	if len(result) != 0 {
 		t.Errorf("Expected 0 results when k=0, got %d", len(result))
 	}
@@ -821,51 +826,51 @@ func TestScenario_NoisySignalImportantEventFiltered(t *testing.T) {
 	//   TC = |ΣΔ| / Σ|Δ| = 0.07/0.45 ≈ 0.156
 	//   History: ±0.20 swings → σ≈0.28 → SNR clamped to 0.5 (minimum)
 	//   Score = KL(0.50,0.57) × vw($2M) × 0.5 × 0.156 ≈ 0.005 < 0.0125 → FILTERED
-	noisyEventID := "btc:100k"
-	noisyEvt := &models.Event{
-		ID: noisyEventID, EventID: "btc", MarketID: "100k",
+	noisyMarketID := "btc:100k"
+	noisyMkt := &models.Market{
+		ID: noisyMarketID, EventID: "btc", MarketID: "100k",
 		Title: "BTC price targets", Category: "crypto", Volume24hr: 2_000_000,
 		YesProbability: 0.57, NoProbability: 0.43,
 	}
 
 	// Market btc:150k ($1.5M volume) — same oscillating pattern, also filtered.
-	noisyEventID2 := "btc:150k"
-	noisyEvt2 := &models.Event{
-		ID: noisyEventID2, EventID: "btc", MarketID: "150k",
+	noisyMarketID2 := "btc:150k"
+	noisyMkt2 := &models.Market{
+		ID: noisyMarketID2, EventID: "btc", MarketID: "150k",
 		Title: "BTC price targets", Category: "crypto", Volume24hr: 1_500_000,
 		YesProbability: 0.18, NoProbability: 0.82,
 	}
 
 	// Positive control: eth:flip ($500K), monotonic window → TC=1.0, stable history → SNR=5.0
 	// Score = KL(0.40,0.60) × vw($500K) × 5.0 × 1.0 ≈ 1.78 >> 0.0125 → PASSES
-	cleanEventID := "eth:flip"
-	cleanEvt := &models.Event{
-		ID: cleanEventID, EventID: "eth", MarketID: "flip",
+	cleanMarketID := "eth:flip"
+	cleanMkt := &models.Market{
+		ID: cleanMarketID, EventID: "eth", MarketID: "flip",
 		Title: "ETH rally", Category: "crypto", Volume24hr: 500_000,
 		YesProbability: 0.60, NoProbability: 0.40,
 	}
 
-	// Register events in storage so AddSnapshot succeeds.
-	if err := store.AddEvent(noisyEvt); err != nil {
-		t.Fatalf("AddEvent btc:100k failed: %v", err)
+	// Register markets in storage so AddSnapshot succeeds.
+	if err := store.AddMarket(noisyMkt); err != nil {
+		t.Fatalf("AddMarket btc:100k failed: %v", err)
 	}
-	if err := store.AddEvent(noisyEvt2); err != nil {
-		t.Fatalf("AddEvent btc:150k failed: %v", err)
+	if err := store.AddMarket(noisyMkt2); err != nil {
+		t.Fatalf("AddMarket btc:150k failed: %v", err)
 	}
-	if err := store.AddEvent(cleanEvt); err != nil {
-		t.Fatalf("AddEvent eth:flip failed: %v", err)
+	if err := store.AddMarket(cleanMkt); err != nil {
+		t.Fatalf("AddMarket eth:flip failed: %v", err)
 	}
 
 	now := time.Now()
 
-	addSnap := func(t *testing.T, eventID string, p float64, age time.Duration) {
+	addSnap := func(t *testing.T, marketID string, p float64, age time.Duration) {
 		t.Helper()
 		if err := store.AddSnapshot(&models.Snapshot{
-			ID: uuid.New().String(), EventID: eventID,
+			ID: uuid.New().String(), EventID: marketID,
 			YesProbability: p, NoProbability: 1 - p, Source: "test",
 			Timestamp: now.Add(-age),
 		}); err != nil {
-			t.Fatalf("AddSnapshot(%s, p=%.3f, age=%v) failed: %v", eventID, p, age, err)
+			t.Fatalf("AddSnapshot(%s, p=%.3f, age=%v) failed: %v", marketID, p, age, err)
 		}
 	}
 
@@ -874,14 +879,14 @@ func TestScenario_NoisySignalImportantEventFiltered(t *testing.T) {
 	for i, p := range noisyHistProbs {
 		// Place at (window + (len-i)*15min) to be clearly outside window
 		histAge := detectionWindow + time.Duration(len(noisyHistProbs)-i)*pollInterval
-		addSnap(t, noisyEventID, p, histAge)
-		addSnap(t, noisyEventID2, p*0.32, histAge)
+		addSnap(t, noisyMarketID, p, histAge)
+		addSnap(t, noisyMarketID2, p*0.32, histAge)
 	}
 
 	cleanHistProbs := []float64{0.400, 0.401, 0.399, 0.400, 0.401, 0.400}
 	for i, p := range cleanHistProbs {
 		histAge := detectionWindow + time.Duration(len(cleanHistProbs)-i)*pollInterval
-		addSnap(t, cleanEventID, p, histAge)
+		addSnap(t, cleanMarketID, p, histAge)
 	}
 
 	// Window snapshots INSIDE 60m window.
@@ -891,39 +896,39 @@ func TestScenario_NoisySignalImportantEventFiltered(t *testing.T) {
 	winStep := (detectionWindow - 5*time.Minute) / time.Duration(len(noisyWindowProbs)-1)
 	for i, p := range noisyWindowProbs {
 		winAge := detectionWindow - 5*time.Minute - time.Duration(i)*winStep
-		addSnap(t, noisyEventID, p, winAge)
-		addSnap(t, noisyEventID2, p*0.32, winAge)
+		addSnap(t, noisyMarketID, p, winAge)
+		addSnap(t, noisyMarketID2, p*0.32, winAge)
 	}
 
 	// Clean market: monotonic [0.40, 0.45, 0.50, 0.55, 0.60] across the window.
 	cleanWindowProbs := []float64{0.40, 0.45, 0.50, 0.55, 0.60}
 	for i, p := range cleanWindowProbs {
 		winAge := detectionWindow - 5*time.Minute - time.Duration(i)*winStep
-		addSnap(t, cleanEventID, p, winAge)
+		addSnap(t, cleanMarketID, p, winAge)
 	}
 
 	changes := []models.Change{
-		{ID: uuid.New().String(), EventID: noisyEventID, OldProbability: 0.50, NewProbability: 0.57, Magnitude: 0.07, Direction: "increase", TimeWindow: detectionWindow, DetectedAt: now},
-		{ID: uuid.New().String(), EventID: noisyEventID2, OldProbability: 0.16, NewProbability: 0.182, Magnitude: 0.022, Direction: "increase", TimeWindow: detectionWindow, DetectedAt: now},
-		{ID: uuid.New().String(), EventID: cleanEventID, OldProbability: 0.40, NewProbability: 0.60, Magnitude: 0.20, Direction: "increase", TimeWindow: detectionWindow, DetectedAt: now},
+		{ID: uuid.New().String(), EventID: noisyMarketID, OldProbability: 0.50, NewProbability: 0.57, Magnitude: 0.07, Direction: "increase", TimeWindow: detectionWindow, DetectedAt: now},
+		{ID: uuid.New().String(), EventID: noisyMarketID2, OldProbability: 0.16, NewProbability: 0.182, Magnitude: 0.022, Direction: "increase", TimeWindow: detectionWindow, DetectedAt: now},
+		{ID: uuid.New().String(), EventID: cleanMarketID, OldProbability: 0.40, NewProbability: 0.60, Magnitude: 0.20, Direction: "increase", TimeWindow: detectionWindow, DetectedAt: now},
 	}
-	eventsMap := map[string]*models.Event{
-		noisyEventID:  noisyEvt,
-		noisyEventID2: noisyEvt2,
-		cleanEventID:  cleanEvt,
+	marketsMap := map[string]*models.Market{
+		noisyMarketID:  noisyMkt,
+		noisyMarketID2: noisyMkt2,
+		cleanMarketID:  cleanMkt,
 	}
 
-	results := mon.ScoreAndRank(changes, eventsMap, minScore, 5, vRef)
+	results := mon.ScoreAndRank(changes, marketsMap, minScore, 5, vRef)
 
 	cleanPassed := false
 	for _, r := range results {
-		if r.EventID == cleanEventID {
+		if r.ID == cleanMarketID {
 			cleanPassed = true
 		}
-		if r.EventID == noisyEventID {
+		if r.ID == noisyMarketID {
 			t.Errorf("NoisyImportant: btc:100k oscillating signal should be filtered (score=%.6f, minScore=%.4f)", r.BestScore, minScore)
 		}
-		if r.EventID == noisyEventID2 {
+		if r.ID == noisyMarketID2 {
 			t.Errorf("NoisyImportant: btc:150k oscillating signal should be filtered (score=%.6f, minScore=%.4f)", r.BestScore, minScore)
 		}
 	}
@@ -966,7 +971,7 @@ func TestScenario_SignificantSignalUnimportantEventFiltered(t *testing.T) {
 	// vw = log2(1 + 30000/25000) = log2(2.2) ≈ 1.14
 	// Score = KL(0.50,0.57) × 1.14 × 1.0 × 1.0 ≈ 0.0112 < minScore=0.0125 → FILTERED
 	lowVolID := "min-vol"
-	lowVolEvt := &models.Event{
+	lowVolMkt := &models.Market{
 		ID: lowVolID, EventID: "min-vol", Title: "Low-volume market", Category: "other",
 		Volume24hr: 30_000, YesProbability: 0.57, NoProbability: 0.43,
 	}
@@ -975,28 +980,28 @@ func TestScenario_SignificantSignalUnimportantEventFiltered(t *testing.T) {
 	// vw = log2(1 + 1000000/25000) = log2(41) ≈ 5.36
 	// Score = KL(0.50,0.57) × 5.36 × 5.0 × 1.0 ≈ 0.264 >> minScore=0.0125 → PASSES
 	highVolID := "liq-vol"
-	highVolEvt := &models.Event{
+	highVolMkt := &models.Market{
 		ID: highVolID, EventID: "liq-vol", Title: "High-volume liquid market", Category: "politics",
 		Volume24hr: 1_000_000, YesProbability: 0.57, NoProbability: 0.43,
 	}
 
-	if err := store.AddEvent(lowVolEvt); err != nil {
-		t.Fatalf("AddEvent min-vol failed: %v", err)
+	if err := store.AddMarket(lowVolMkt); err != nil {
+		t.Fatalf("AddMarket min-vol failed: %v", err)
 	}
-	if err := store.AddEvent(highVolEvt); err != nil {
-		t.Fatalf("AddEvent liq-vol failed: %v", err)
+	if err := store.AddMarket(highVolMkt); err != nil {
+		t.Fatalf("AddMarket liq-vol failed: %v", err)
 	}
 
 	now := time.Now()
 
-	addSnap := func(t *testing.T, eventID string, p float64, age time.Duration) {
+	addSnap := func(t *testing.T, marketID string, p float64, age time.Duration) {
 		t.Helper()
 		if err := store.AddSnapshot(&models.Snapshot{
-			ID: uuid.New().String(), EventID: eventID,
+			ID: uuid.New().String(), EventID: marketID,
 			YesProbability: p, NoProbability: 1 - p, Source: "test",
 			Timestamp: now.Add(-age),
 		}); err != nil {
-			t.Fatalf("AddSnapshot(%s) failed: %v", eventID, err)
+			t.Fatalf("AddSnapshot(%s) failed: %v", marketID, err)
 		}
 	}
 
@@ -1022,19 +1027,19 @@ func TestScenario_SignificantSignalUnimportantEventFiltered(t *testing.T) {
 		{ID: uuid.New().String(), EventID: lowVolID, OldProbability: 0.50, NewProbability: 0.57, Magnitude: 0.07, Direction: "increase", TimeWindow: detectionWindow, DetectedAt: now},
 		{ID: uuid.New().String(), EventID: highVolID, OldProbability: 0.50, NewProbability: 0.57, Magnitude: 0.07, Direction: "increase", TimeWindow: detectionWindow, DetectedAt: now},
 	}
-	eventsMap := map[string]*models.Event{
-		lowVolID:  lowVolEvt,
-		highVolID: highVolEvt,
+	marketsMap := map[string]*models.Market{
+		lowVolID:  lowVolMkt,
+		highVolID: highVolMkt,
 	}
 
-	results := mon.ScoreAndRank(changes, eventsMap, minScore, 5, vRef)
+	results := mon.ScoreAndRank(changes, marketsMap, minScore, 5, vRef)
 
 	highVolPassed := false
 	for _, r := range results {
-		if r.EventID == lowVolID {
+		if r.ID == lowVolID {
 			t.Errorf("UnimportantFiltered: min-vol ($30K, no history) should be filtered (score=%.6f, minScore=%.4f)", r.BestScore, minScore)
 		}
-		if r.EventID == highVolID {
+		if r.ID == highVolID {
 			highVolPassed = true
 		}
 	}
@@ -1079,10 +1084,10 @@ func TestScoreAndRank_GroupsByOriginalEventID(t *testing.T) {
 	store := storage.New(100, 50, "/tmp/test-grouping.json", 0644, 0755)
 	mon := New(store)
 
-	events := map[string]*models.Event{
-		"btc:100k": {ID: "btc:100k", Volume24hr: 500_000},
-		"btc:150k": {ID: "btc:150k", Volume24hr: 400_000},
-		"eth:flip": {ID: "eth:flip", Volume24hr: 200_000},
+	markets := map[string]*models.Market{
+		"btc:100k": {ID: "btc:100k", EventID: "btc", Volume24hr: 500_000, Title: "BTC 100k", Category: "crypto"},
+		"btc:150k": {ID: "btc:150k", EventID: "btc", Volume24hr: 400_000, Title: "BTC 150k", Category: "crypto"},
+		"eth:flip": {ID: "eth:flip", EventID: "eth", Volume24hr: 200_000, Title: "ETH flip", Category: "crypto"},
 	}
 	changes := []models.Change{
 		{ID: "c1", EventID: "btc:100k", OriginalEventID: "btc", OldProbability: 0.50, NewProbability: 0.65, Magnitude: 0.15, Direction: "increase", TimeWindow: time.Hour, DetectedAt: time.Now()},
@@ -1090,21 +1095,21 @@ func TestScoreAndRank_GroupsByOriginalEventID(t *testing.T) {
 		{ID: "c3", EventID: "eth:flip", OriginalEventID: "eth", OldProbability: 0.40, NewProbability: 0.60, Magnitude: 0.20, Direction: "increase", TimeWindow: time.Hour, DetectedAt: time.Now()},
 	}
 
-	groups := mon.ScoreAndRank(changes, events, 0.0, 10, 25000.0)
+	groups := mon.ScoreAndRank(changes, markets, 0.0, 10, 25000.0)
 
 	if len(groups) != 2 {
 		t.Errorf("Expected 2 groups (btc, eth), got %d", len(groups))
 	}
 
 	// Find btc group
-	var btcGroup *models.EventGroup
+	var btcGroup *models.Event
 	for i := range groups {
-		if groups[i].EventID == "btc" {
+		if groups[i].ID == "btc" {
 			btcGroup = &groups[i]
 		}
 	}
 	if btcGroup == nil {
-		t.Fatal("Expected a group with EventID='btc', not found")
+		t.Fatal("Expected a group with ID='btc', not found")
 	}
 	if len(btcGroup.Markets) != 2 {
 		t.Errorf("Expected 2 markets in btc group, got %d", len(btcGroup.Markets))
@@ -1118,11 +1123,11 @@ func TestScoreAndRank_TopKAtGroupLevel(t *testing.T) {
 	mon := New(store)
 
 	// 4 markets: 2 from "grok" event + 2 singletons. k=2 should give 2 groups.
-	events := map[string]*models.Event{
-		"grok:feb": {ID: "grok:feb", Volume24hr: 300_000},
-		"grok:mar": {ID: "grok:mar", Volume24hr: 250_000},
-		"iran":     {ID: "iran", Volume24hr: 400_000},
-		"btc":      {ID: "btc", Volume24hr: 100_000},
+	markets := map[string]*models.Market{
+		"grok:feb": {ID: "grok:feb", EventID: "grok", Volume24hr: 300_000, Title: "Grok Feb", Category: "ai"},
+		"grok:mar": {ID: "grok:mar", EventID: "grok", Volume24hr: 250_000, Title: "Grok Mar", Category: "ai"},
+		"iran":     {ID: "iran", EventID: "iran", Volume24hr: 400_000, Title: "Iran", Category: "geopolitics"},
+		"btc":      {ID: "btc", EventID: "btc", Volume24hr: 100_000, Title: "BTC", Category: "crypto"},
 	}
 	changes := []models.Change{
 		{ID: "c1", EventID: "grok:feb", OriginalEventID: "grok", OldProbability: 0.50, NewProbability: 0.65, Magnitude: 0.15, Direction: "increase", TimeWindow: time.Hour, DetectedAt: time.Now()},
@@ -1131,7 +1136,7 @@ func TestScoreAndRank_TopKAtGroupLevel(t *testing.T) {
 		{ID: "c4", EventID: "btc", OriginalEventID: "btc", OldProbability: 0.50, NewProbability: 0.55, Magnitude: 0.05, Direction: "increase", TimeWindow: time.Hour, DetectedAt: time.Now()},
 	}
 
-	groups := mon.ScoreAndRank(changes, events, 0.0, 2, 25000.0)
+	groups := mon.ScoreAndRank(changes, markets, 0.0, 2, 25000.0)
 	if len(groups) != 2 {
 		t.Errorf("Expected 2 groups (k=2), got %d", len(groups))
 	}
@@ -1155,16 +1160,16 @@ func TestFilterRecentlySent_SuppressesDuplicates(t *testing.T) {
 		TimeWindow:     time.Hour,
 		DetectedAt:     time.Now(),
 	}
-	group := models.EventGroup{
-		EventID: "evt-1",
+	group := models.Event{
+		ID:      "evt-1",
 		Markets: []models.Change{change},
 	}
 
 	// Record as notified
-	mon.RecordNotified([]models.EventGroup{group})
+	mon.RecordNotified([]models.Event{group})
 
 	// Immediately filter with a long cooldown — should be suppressed
-	filtered := mon.FilterRecentlySent([]models.EventGroup{group}, time.Hour)
+	filtered := mon.FilterRecentlySent([]models.Event{group}, time.Hour)
 	if len(filtered) != 0 {
 		t.Errorf("Expected 0 groups after suppressing duplicate, got %d", len(filtered))
 	}
@@ -1186,11 +1191,11 @@ func TestFilterRecentlySent_AllowsDirectionChange(t *testing.T) {
 		OldProbability: 0.60, NewProbability: 0.50, Magnitude: 0.10,
 		Direction: "decrease", TimeWindow: time.Hour, DetectedAt: time.Now(),
 	}
-	origGroup := models.EventGroup{EventID: "evt-1", Markets: []models.Change{original}}
-	mon.RecordNotified([]models.EventGroup{origGroup})
+	origGroup := models.Event{ID: "evt-1", Markets: []models.Change{original}}
+	mon.RecordNotified([]models.Event{origGroup})
 
-	revGroup := models.EventGroup{EventID: "evt-1", Markets: []models.Change{reversed}}
-	filtered := mon.FilterRecentlySent([]models.EventGroup{revGroup}, time.Hour)
+	revGroup := models.Event{ID: "evt-1", Markets: []models.Change{reversed}}
+	filtered := mon.FilterRecentlySent([]models.Event{revGroup}, time.Hour)
 	if len(filtered) != 1 {
 		t.Errorf("Expected 1 group (direction changed), got %d", len(filtered))
 	}
@@ -1209,8 +1214,8 @@ func TestFilterRecentlySent_AllowsDeterministicZoneEntry(t *testing.T) {
 		OldProbability: 0.80, NewProbability: 0.85, Magnitude: 0.05,
 		Direction: "increase", TimeWindow: time.Hour, DetectedAt: time.Now(),
 	}
-	prevGroup := models.EventGroup{EventID: "evt-1", Markets: []models.Change{prev}}
-	mon.RecordNotified([]models.EventGroup{prevGroup})
+	prevGroup := models.Event{ID: "evt-1", Markets: []models.Change{prev}}
+	mon.RecordNotified([]models.Event{prevGroup})
 
 	// New notification: increase to 92% (entering det zone for first time)
 	entering := models.Change{
@@ -1218,8 +1223,8 @@ func TestFilterRecentlySent_AllowsDeterministicZoneEntry(t *testing.T) {
 		OldProbability: 0.85, NewProbability: 0.92, Magnitude: 0.07,
 		Direction: "increase", TimeWindow: time.Hour, DetectedAt: time.Now(),
 	}
-	enteringGroup := models.EventGroup{EventID: "evt-1", Markets: []models.Change{entering}}
-	filtered := mon.FilterRecentlySent([]models.EventGroup{enteringGroup}, time.Hour)
+	enteringGroup := models.Event{ID: "evt-1", Markets: []models.Change{entering}}
+	filtered := mon.FilterRecentlySent([]models.Event{enteringGroup}, time.Hour)
 	if len(filtered) != 1 {
 		t.Errorf("Expected 1 group (entering det zone), got %d", len(filtered))
 	}
@@ -1230,7 +1235,7 @@ func TestFilterRecentlySent_NeverNil(t *testing.T) {
 	store := storage.New(100, 50, "/tmp/test-cooldown-nil.json", 0644, 0755)
 	mon := New(store)
 
-	result := mon.FilterRecentlySent([]models.EventGroup{}, time.Hour)
+	result := mon.FilterRecentlySent([]models.Event{}, time.Hour)
 	if result == nil {
 		t.Error("FilterRecentlySent should never return nil")
 	}
@@ -1247,7 +1252,7 @@ func TestFilterRecentlySent_PassesAfterCooldown(t *testing.T) {
 		OldProbability: 0.50, NewProbability: 0.60, Magnitude: 0.10,
 		Direction: "increase", TimeWindow: time.Hour, DetectedAt: time.Now(),
 	}
-	group := models.EventGroup{EventID: "evt-1", Markets: []models.Change{change}}
+	group := models.Event{ID: "evt-1", Markets: []models.Change{change}}
 
 	// Manually set SentAt to 2 hours ago
 	mon.notifiedMarkets["evt-1"] = notifiedRecord{
@@ -1257,7 +1262,7 @@ func TestFilterRecentlySent_PassesAfterCooldown(t *testing.T) {
 	}
 
 	// Cooldown is 1 hour — should pass now
-	filtered := mon.FilterRecentlySent([]models.EventGroup{group}, time.Hour)
+	filtered := mon.FilterRecentlySent([]models.Event{group}, time.Hour)
 	if len(filtered) != 1 {
 		t.Errorf("Expected 1 group after cooldown expired, got %d", len(filtered))
 	}

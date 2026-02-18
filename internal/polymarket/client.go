@@ -121,14 +121,14 @@ func NewClient(gammaAPIURL, clobAPIURL string, timeout time.Duration, cfg ...Cli
 // FetchEvents retrieves events from Polymarket Gamma API with filtering
 // Filter order: 1) categories, 2) top K by volume (logical OR), 3) then detect changes
 // Uses pagination to fetch events beyond the API's 500 per-request limit.
-func (c *Client) FetchEvents(ctx context.Context, categories []string, vol24hrMin, vol1wkMin, vol1moMin float64, volumeFilterOR bool, limit int) ([]models.Event, error) {
+func (c *Client) FetchEvents(ctx context.Context, categories []string, vol24hrMin, vol1wkMin, vol1moMin float64, volumeFilterOR bool, limit int) ([]models.Market, error) {
 	// Filter by categories
 	categoryMap := make(map[string]bool)
 	for _, cat := range categories {
 		categoryMap[cat] = true
 	}
 
-	var allEvents []models.Event
+	var allEvents []models.Market
 	const pageSize = 500 // API max per request
 	maxFetch := limit * 3
 
@@ -249,7 +249,7 @@ func (c *Client) FetchEvents(ctx context.Context, categories []string, vol24hrMi
 				// This prevents data loss when events transition from single to multi-market
 				compositeID := pe.ID + ":" + market.ID
 
-				event := models.Event{
+				event := models.Market{
 					ID:             compositeID,
 					EventID:        pe.ID,
 					MarketID:       market.ID,

@@ -67,7 +67,7 @@ const probEpsilon = 1e-7
 // DetectChanges identifies probability changes within a time window that exceed the
 // minimum floor (0.1%). Scoring via ScoreAndRank is responsible for quality filtering.
 // Returns changes, per-event errors (non-fatal), and a fatal error if window is invalid.
-func (m *Monitor) DetectChanges(events []models.Event, window time.Duration) ([]models.Change, []DetectionError, error) {
+func (m *Monitor) DetectChanges(markets []models.Market, window time.Duration) ([]models.Change, []DetectionError, error) {
 	if window <= 0 {
 		return nil, nil, fmt.Errorf("invalid window %v: must be positive", window)
 	}
@@ -82,10 +82,10 @@ func (m *Monitor) DetectChanges(events []models.Event, window time.Duration) ([]
 	eventsWithChangeBelowFloor := 0
 	maxChangeSeen := 0.0
 
-	for _, event := range events {
-		snapshots, err := m.storage.GetSnapshotsInWindow(event.ID, window)
+	for _, market := range markets {
+		snapshots, err := m.storage.GetSnapshotsInWindow(market.ID, window)
 		if err != nil {
-			detectionErrors = append(detectionErrors, DetectionError{EventID: event.ID, Err: err})
+			detectionErrors = append(detectionErrors, DetectionError{EventID: market.ID, Err: err})
 			continue
 		}
 
@@ -117,12 +117,12 @@ func (m *Monitor) DetectChanges(events []models.Event, window time.Duration) ([]
 
 			changes = append(changes, models.Change{
 				ID:              uuid.New().String(),
-				EventID:         event.ID,
-				OriginalEventID: event.EventID,
-				EventQuestion:   event.Title,
-				EventURL:        event.EventURL,
-				MarketID:        event.MarketID,
-				MarketQuestion:  event.MarketQuestion,
+				EventID:         market.ID,
+				OriginalEventID: market.EventID,
+				EventTitle:      market.Title,
+				EventURL:        market.EventURL,
+				MarketID:        market.MarketID,
+				MarketQuestion:  market.MarketQuestion,
 				Magnitude:       change,
 				Direction:       direction,
 				OldProbability:  oldest.YesProbability,
@@ -237,8 +237,8 @@ func CompositeScore(kl, vw, snr, tc float64) float64 {
 // groupByEvent groups a slice of scored changes by their OriginalEventID (falling
 // back to EventID when OriginalEventID is empty). Markets within each group are
 // sorted by SignalScore descending. Insertion order of groups is preserved.
-func groupByEvent(changes []models.Change) []models.EventGroup {
-	groupMap := make(map[string]*models.EventGroup)
+func groupByEvent(changes []models.Change) []models.Event {
+	groupMap := make(map[string]*models.Event)
 	order := []string{}
 
 	for _, change := range changes {
@@ -247,10 +247,11 @@ func groupByEvent(changes []models.Change) []models.EventGroup {
 			id = change.EventID
 		}
 		if _, exists := groupMap[id]; !exists {
-			groupMap[id] = &models.EventGroup{
-				EventID:       id,
-				EventQuestion: change.EventQuestion,
-				EventURL:      change.EventURL,
+			groupMap[id] = &models.Event{
+				ID:      id,
+				Title:   change.EventTitle,
+				URL:     change.EventURL,
+				Markets: []models.Change{},
 			}
 			order = append(order, id)
 		}
@@ -261,7 +262,7 @@ func groupByEvent(changes []models.Change) []models.EventGroup {
 		}
 	}
 
-	result := make([]models.EventGroup, 0, len(order))
+	result := make([]models.Event, 0, len(order))
 	for _, id := range order {
 		g := *groupMap[id]
 		sort.Slice(g.Markets, func(a, b int) bool {
@@ -278,14 +279,14 @@ func groupByEvent(changes []models.Change) []models.EventGroup {
 // by EventID lexicographic descending for determinism. Returns an empty (non-nil)
 // slice when nothing clears the quality bar.
 // vRef is the reference volume for log-volume weighting (typically volume_24hr_min
-// from config); events at this volume receive weight ≈ 1.0.
+// from config); markets at this volume receive weight ≈ 1.0.
 func (m *Monitor) ScoreAndRank(
 	changes []models.Change,
-	events map[string]*models.Event,
+	markets map[string]*models.Market,
 	minScore float64,
 	k int,
 	vRef float64,
-) []models.EventGroup {
+) []models.Event {
 	if vRef <= 0 {
 		vRef = 25000.0
 	}
@@ -293,9 +294,9 @@ func (m *Monitor) ScoreAndRank(
 	var candidates []models.Change
 
 	for _, change := range changes {
-		event, ok := events[change.EventID]
+		market, ok := markets[change.EventID]
 		if !ok {
-			logger.Warn("ScoreAndRank: event %s not found in map, skipping", change.EventID)
+			logger.Warn("ScoreAndRank: market %s not found in map, skipping", change.EventID)
 			continue
 		}
 
@@ -312,7 +313,7 @@ func (m *Monitor) ScoreAndRank(
 		}
 
 		kl := KLDivergence(change.OldProbability, change.NewProbability)
-		vw := LogVolumeWeight(event.Volume24hr, vRef)
+		vw := LogVolumeWeight(market.Volume24hr, vRef)
 		score := CompositeScore(kl, vw, snr, tc)
 
 		change.SignalScore = score
@@ -327,12 +328,12 @@ func (m *Monitor) ScoreAndRank(
 		if groups[i].BestScore != groups[j].BestScore {
 			return groups[i].BestScore > groups[j].BestScore
 		}
-		// Tie-break: EventID lexicographic descending
-		return groups[i].EventID > groups[j].EventID
+		// Tie-break: ID lexicographic descending
+		return groups[i].ID > groups[j].ID
 	})
 
 	if k <= 0 || len(groups) == 0 {
-		return []models.EventGroup{}
+		return []models.Event{}
 	}
 	if k > len(groups) {
 		k = len(groups)
@@ -349,9 +350,9 @@ func isDeterministicZone(p float64) bool {
 // FilterRecentlySent removes markets from groups that were recently notified with
 // the same direction and are not entering the deterministic zone for the first time.
 // Groups that become empty after filtering are dropped. Returns a non-nil slice.
-func (m *Monitor) FilterRecentlySent(groups []models.EventGroup, cooldown time.Duration) []models.EventGroup {
+func (m *Monitor) FilterRecentlySent(groups []models.Event, cooldown time.Duration) []models.Event {
 	now := time.Now()
-	var result []models.EventGroup
+	var result []models.Event
 
 	for _, group := range groups {
 		var filtered []models.Change
@@ -385,14 +386,14 @@ func (m *Monitor) FilterRecentlySent(groups []models.EventGroup, cooldown time.D
 	}
 
 	if result == nil {
-		return []models.EventGroup{}
+		return []models.Event{}
 	}
 	return result
 }
 
 // RecordNotified records all markets in the given groups as notified at the current time.
 // Call this after a successful Telegram send to enable cooldown deduplication.
-func (m *Monitor) RecordNotified(groups []models.EventGroup) {
+func (m *Monitor) RecordNotified(groups []models.Event) {
 	now := time.Now()
 	for _, group := range groups {
 		for _, change := range group.Markets {
