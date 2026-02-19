@@ -2,6 +2,8 @@
 
 A lightweight Go service that monitors Polymarket prediction markets for significant probability shifts and delivers Telegram alerts for the top-K highest-signal events.
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18700972.svg)](https://doi.org/10.5281/zenodo.18700972)
+
 ## How It Works
 
 Each polling cycle:
