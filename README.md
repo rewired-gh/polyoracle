@@ -155,3 +155,7 @@ docs/                   Tuning notes, valid category reference
 - [go-telegram-bot-api](https://github.com/go-telegram-bot-api/telegram-bot-api) — Telegram integration
 - [google/uuid](https://github.com/google/uuid) — change record IDs
 - [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) — pure-Go SQLite driver (no CGO)
+
+## Disclaimer
+
+This project is an independent, open-source initiative. It has no affiliation, connection, or association with any commercial products, brands, companies, or services.
