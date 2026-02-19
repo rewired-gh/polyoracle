@@ -26,7 +26,8 @@ bin/                   # Built binaries
 ```bash
 # Development
 make install           # Install dependencies (go mod download)
-make build             # Build binary to bin/polyoracle
+make build             # Build binary to bin/polyoracle (native)
+make build-linux       # Cross-compile for Linux x86_64 → bin/polyoracle-linux-amd64
 make test              # Run all tests
 make test-coverage     # Run tests with coverage
 make run               # Build and run with configs/config.yaml
